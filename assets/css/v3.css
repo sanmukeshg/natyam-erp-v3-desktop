@@ -1,0 +1,1297 @@
+/* ============================================================================
+   NATYAM ERP v3 — DESKTOP DESIGN LAYER
+   ----------------------------------------------------------------------------
+   The v3 visual system, implemented from the approved Claude Design project
+   "NATYAM ERP Rebuild v3" (Dashboard.dc.html + "Sidebar Navigation.dc.html").
+
+   WHY THIS FILE EXISTS, AND WHAT IT DOES NOT DO
+   v2's tokens.css describes a cool-neutral/indigo interface on opaque
+   surfaces. v3's approved direction is different in kind, not degree: the
+   whole application sits on the school's terracotta stage artwork, and every
+   surface above it is translucent glass. That cannot be expressed by
+   reassigning v2's --surface-* tokens, so it is added here as its own layer
+   rather than by rewriting tokens.css — which stays untouched and still
+   supplies the shared type scale, spacing grid, radii, motion and z-index.
+
+   Values below are transcribed from the design files, not invented. Where the
+   design uses a measurement that is off v2's 4px grid (34px rows, 9px radii,
+   13.5px brand type) the design wins and the value is named here as a v3
+   token, rather than being rounded onto the old scale.
+
+   THEME. The design carries two variants, switched by its own toggle. Both
+   are warm-on-artwork; they are not v2's light/dark. They are wired to the
+   app's existing [data-theme] preference so the user's saved choice keeps
+   working and the header toggle keeps meaning something.
+   ========================================================================== */
+
+:root {
+    /* ---- v3 brand ---- */
+    --v3-terracotta:      #B45B34;
+    --v3-terracotta-deep: #8C4A28;
+    --v3-cream:           #FFF8EF;
+    --v3-ink:             #3A2013;
+    --v3-ink-soft:        #5B4632;
+
+    /* ---- tone ramp (KPI accents, severity dots) ---- */
+    --v3-positive: #8FD99A;
+    --v3-negative: #F0917C;
+    --v3-caution:  #F0C177;
+
+    /* ---- shape / metrics taken from the design ---- */
+    --v3-radius-item:   9px;
+    --v3-radius-card:   14px;
+    --v3-radius-pill:   99px;
+    --v3-nav-item-h:    34px;
+    --v3-sidebar-w:     248px;
+    --v3-sidebar-rail:  64px;
+    --v3-header-h:      56px;
+
+    --v3-glass-blur: blur(10px) saturate(128%);
+
+    /* The stage artwork every surface floats on. Same brand image the
+       landing screen uses (assets/css/auth.css) — the design project's own
+       `desktop-bg-ref.png` is a reference copy of this artwork, so the real
+       brand asset is used rather than duplicating it. */
+    --v3-backdrop: url("../img/brand/landing-desktop-bg.jpg");
+}
+
+/* ---------------------------------------------------------------- DARK ---- */
+/* The design's default. Deep, warm, high-contrast glass. */
+:root,
+[data-theme="dark"] {
+    --v3-scrim:          rgba(30, 15, 8, 0.22);
+    --v3-title:          #FFF8EF;
+    --v3-title-shadow:   0 1px 4px rgba(0, 0, 0, 0.3);
+    --v3-sub:            rgba(255, 248, 239, 0.78);
+
+    --v3-sidebar-bg:     linear-gradient(180deg, rgba(20, 11, 6, 0.9), rgba(35, 19, 10, 0.9));
+    --v3-sidebar-border: rgba(255, 248, 239, 0.1);
+    --v3-sidebar-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+
+    --v3-nav-label:      rgba(255, 248, 239, 0.55);
+    --v3-nav-item:       rgba(255, 248, 239, 0.68);
+    --v3-nav-active:     #FFF8EF;
+    --v3-nav-active-bg:  rgba(180, 91, 52, 0.55);
+    --v3-nav-group-open: rgba(255, 248, 239, 0.06);
+    --v3-nav-field-bg:     rgba(255, 248, 239, 0.08);
+    --v3-nav-field-border: rgba(255, 248, 239, 0.14);
+
+    --v3-card-bg:      rgba(58, 32, 20, 0.58);
+    --v3-card-border:  rgba(255, 248, 239, 0.16);
+    --v3-card-shadow:  0 10px 30px rgba(58, 32, 20, 0.3);
+    --v3-row-border:   rgba(255, 248, 239, 0.1);
+    --v3-name:         #FFFFFF;
+    --v3-muted:        rgba(255, 248, 239, 0.7);
+
+    --v3-ghost-bg:     rgba(255, 255, 255, 0.12);
+
+    --v3-tone-bg-positive:     rgba(94, 166, 101, 0.14);
+    --v3-tone-bg-negative:     rgba(224, 94, 74, 0.14);
+    --v3-tone-bg-caution:      rgba(224, 166, 74, 0.14);
+    --v3-tone-bg-neutral:      rgba(58, 32, 20, 0.35);
+    --v3-tone-border-positive: rgba(143, 217, 154, 0.3);
+    --v3-tone-border-negative: rgba(240, 145, 124, 0.3);
+    --v3-tone-border-caution:  rgba(240, 193, 119, 0.3);
+    --v3-tone-border-neutral:  rgba(255, 248, 239, 0.16);
+    --v3-tone-neutral:         rgba(255, 248, 239, 0.4);
+
+    --v3-delta-positive: #8FD99A;
+    --v3-delta-negative: #F0917C;
+    --v3-delta-caution:  #F0C177;
+    --v3-delta-neutral:  rgba(255, 248, 239, 0.7);
+}
+
+/* --------------------------------------------------------------- LIGHT ---- */
+/* The design's lighter variant: the same artwork, paler glass. */
+[data-theme="light"] {
+    /* The design's own light token here is rgba(255,248,239,0.22) — a
+       *lightening* scrim. That works in the mock, but this variant keeps
+       white type (--v3-name below is #FFFFFF): it is lighter glass on a dark
+       photo, not a light theme in the conventional sense. Lightening the
+       backdrop under white text is what washed the KPI values out on the real
+       artwork, so the scrim darkens in both variants and only the glass above
+       it gets lighter. Verified against the actual asset, not assumed. */
+    --v3-scrim:          rgba(30, 15, 8, 0.30);
+    --v3-title:          #FFFFFF;
+    --v3-title-shadow:   0 1px 4px rgba(0, 0, 0, 0.25);
+    --v3-sub:            rgba(255, 255, 255, 0.75);
+
+    --v3-sidebar-bg:     rgba(255, 255, 255, 0.14);
+    --v3-sidebar-border: rgba(255, 255, 255, 0.25);
+    --v3-sidebar-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+
+    --v3-nav-label:      rgba(255, 255, 255, 0.6);
+    --v3-nav-item:       rgba(255, 255, 255, 0.88);
+    --v3-nav-active:     #FFFFFF;
+    --v3-nav-active-bg:  rgba(180, 91, 52, 0.55);
+    --v3-nav-group-open: rgba(255, 255, 255, 0.1);
+    --v3-nav-field-bg:     rgba(255, 255, 255, 0.12);
+    --v3-nav-field-border: rgba(255, 255, 255, 0.22);
+
+    --v3-card-bg:      rgba(255, 255, 255, 0.14);
+    --v3-card-border:  rgba(255, 255, 255, 0.25);
+    --v3-card-shadow:  0 10px 30px rgba(0, 0, 0, 0.2);
+    --v3-row-border:   rgba(255, 255, 255, 0.16);
+    --v3-name:         #FFFFFF;
+    --v3-muted:        rgba(255, 255, 255, 0.72);
+
+    --v3-ghost-bg:     rgba(255, 255, 255, 0.14);
+
+    /* TONE BACKGROUNDS — v3 FIX, diverges from the design's light variant.
+       The design pairs opaque pastel tone-fills (#E9F5EF, #FBE4DC, #FBEEDC)
+       with WHITE type (--v3-name is #FFFFFF in this variant too). Measured on
+       the real screens that is a contrast ratio of 1.03–1.22 — WCAG AA wants
+       4.5 — i.e. white on near-white, effectively invisible. The mock was
+       evidently never checked against its own type colour.
+       Translucent tints instead, so the darkened backdrop shows through and
+       white type reads, consistent with --v3-card-bg in this same variant. */
+    --v3-tone-bg-positive:     rgba(94, 166, 101, 0.30);
+    --v3-tone-bg-negative:     rgba(224, 94, 74, 0.30);
+    --v3-tone-bg-caution:      rgba(224, 166, 74, 0.30);
+    --v3-tone-bg-neutral:      rgba(255, 255, 255, 0.16);
+    --v3-tone-border-positive: rgba(143, 217, 154, 0.45);
+    --v3-tone-border-negative: rgba(240, 145, 124, 0.45);
+    --v3-tone-border-caution:  rgba(240, 193, 119, 0.45);
+    --v3-tone-border-neutral:  rgba(255, 255, 255, 0.35);
+    --v3-tone-neutral:         rgba(255, 255, 255, 0.5);
+
+    /* Delta text sits ON those tints, so it lightens with them — the dark
+       ramp (#3E6B31 …) was legible only against the pastel fills above. */
+    --v3-delta-positive: #A8E6B2;
+    --v3-delta-negative: #F7AE9C;
+    --v3-delta-caution:  #F5D08E;
+    --v3-delta-neutral:  rgba(255, 255, 255, 0.8);
+}
+
+/* ==========================================================================
+   SHELL
+   ========================================================================== */
+
+.v3-shell {
+    display: grid;
+    grid-template-columns: var(--v3-sidebar-w) minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    /* Scrim over the artwork, per the design's own `scrim` token and the way
+       "Sidebar Navigation.dc.html" composites its main region. Without it the
+       backdrop's bright upper third washes out the glass cards sitting on it. */
+    background:
+        linear-gradient(var(--v3-scrim), var(--v3-scrim)),
+        var(--v3-backdrop) center / cover no-repeat fixed;
+    font-family: var(--font-ui);
+}
+.v3-shell[data-rail="collapsed"] { grid-template-columns: var(--v3-sidebar-rail) minmax(0, 1fr); }
+
+.skip-link {
+    position: absolute; left: -9999px; top: 0; z-index: var(--z-toast);
+    background: var(--v3-terracotta); color: #fff; padding: var(--space-3) var(--space-4);
+    border-radius: 0 0 var(--v3-radius-item) 0;
+}
+.skip-link:focus { left: 0; }
+
+/* ------------------------------------------------------------- SIDEBAR ---- */
+
+.v3-sidebar {
+    display: flex; flex-direction: column;
+    height: 100%; overflow: hidden; position: relative; z-index: 1;
+    background: var(--v3-sidebar-bg);
+    backdrop-filter: blur(11px) saturate(128%);
+    -webkit-backdrop-filter: blur(11px) saturate(128%);
+    border-right: 1px solid var(--v3-sidebar-border);
+    box-shadow: var(--v3-sidebar-shadow);
+}
+
+.v3-brand {
+    display: flex; align-items: center; gap: 10px;
+    height: var(--v3-header-h); padding: 0 14px; flex-shrink: 0;
+    border-bottom: 1px solid var(--v3-sidebar-border);
+}
+.v3-brand-mark {
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px;
+    display: grid; place-items: center; overflow: hidden;
+    background: var(--v3-terracotta-deep); color: var(--v3-cream);
+}
+.v3-brand-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.v3-brand-text { min-width: 0; overflow: hidden; flex: 1; }
+.v3-brand-name {
+    display: block; font-family: var(--font-display); font-weight: var(--weight-bold);
+    font-size: 13.5px; letter-spacing: 0.02em; color: var(--v3-cream); white-space: nowrap;
+}
+.v3-brand-sub {
+    display: block; font-size: 10.5px; color: var(--v3-muted); white-space: nowrap;
+}
+.v3-rail-toggle {
+    margin-left: auto; flex-shrink: 0; width: 24px; height: 24px;
+    display: grid; place-items: center; border: none; cursor: pointer;
+    background: rgba(255, 248, 239, 0.1); border-radius: 7px; color: var(--v3-cream);
+}
+.v3-rail-toggle:hover { background: rgba(255, 248, 239, 0.2); }
+
+.v3-jump { padding: 10px 12px 4px; flex-shrink: 0; }
+.v3-jump-btn {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    height: 32px; padding: 0 10px; cursor: pointer;
+    background: var(--v3-nav-field-bg);
+    border: 1px solid var(--v3-nav-field-border);
+    border-radius: var(--v3-radius-item);
+    color: var(--v3-nav-label); font-size: 11.5px; font-family: inherit;
+    white-space: nowrap;
+}
+.v3-jump-btn:hover { background: rgba(255, 248, 239, 0.14); }
+
+.v3-nav { flex: 1; padding: 6px 10px 16px; overflow-y: auto; overflow-x: hidden; }
+
+.v3-nav-group { margin-top: 6px; }
+.v3-nav-group-btn {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 8px; background: transparent; border: none; cursor: pointer;
+    border-radius: var(--v3-radius-item); color: var(--v3-nav-label);
+    font-family: inherit;
+}
+.v3-nav-group[data-open="true"] .v3-nav-group-btn { background: var(--v3-nav-group-open); color: var(--v3-nav-active); }
+.v3-nav-group-btn:hover { background: var(--v3-nav-group-open); }
+.v3-nav-group-label {
+    flex: 1; text-align: left; font-size: 11px; font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; color: inherit;
+    white-space: nowrap; overflow: hidden;
+}
+.v3-nav-chevron { flex-shrink: 0; transition: transform var(--duration-fast) var(--ease-standard); }
+.v3-nav-group[data-open="true"] .v3-nav-chevron { transform: rotate(180deg); }
+
+.v3-nav-list { list-style: none; margin: 0; padding: 0; }
+.v3-nav-group[data-open="false"] .v3-nav-list { display: none; }
+
+.v3-nav-item {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    height: var(--v3-nav-item-h); padding: 0 12px; margin: 1px 0;
+    font-size: var(--text-sm); font-weight: var(--weight-medium);
+    color: var(--v3-nav-item); background: transparent;
+    border-radius: var(--v3-radius-item); text-decoration: none;
+}
+.v3-nav-item:hover { background: rgba(255, 248, 239, 0.1); color: var(--v3-nav-active); text-decoration: none; }
+.v3-nav-item[aria-current="page"] { background: var(--v3-nav-active-bg); color: var(--v3-nav-active); }
+.v3-nav-item .icon { flex-shrink: 0; }
+.v3-nav-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Not-yet-migrated modules read as present but clearly unavailable, rather
+   than as links that appear to work and then fail. */
+.v3-nav-item[data-pending="true"] { opacity: 0.45; }
+.v3-nav-item[data-pending="true"]::after {
+    content: "soon"; flex-shrink: 0;
+    font-size: 9px; font-weight: var(--weight-bold); letter-spacing: 0.04em;
+    text-transform: uppercase; opacity: 0.8;
+}
+
+/* Rail (icon-only) mode: hide every label, centre every glyph.
+   The group *header* goes too. In rail mode every group is force-open (see
+   below), so its toggle does nothing — and leaving it in stacked a group
+   icon directly above its first item's icon, which read as a duplicated
+   row (Overview's `home` sitting on top of Dashboard's `home`). Twenty
+   glyphs in a 64px column with no labels is not navigation. */
+.v3-shell[data-rail="collapsed"] .v3-brand-text,
+.v3-shell[data-rail="collapsed"] .v3-jump,
+.v3-shell[data-rail="collapsed"] .v3-nav-group-btn,
+.v3-shell[data-rail="collapsed"] .v3-nav-item-label,
+.v3-shell[data-rail="collapsed"] .v3-nav-item[data-pending="true"]::after { display: none; }
+.v3-shell[data-rail="collapsed"] .v3-nav-item { justify-content: center; padding: 8px 0; }
+/* Groups still read as groups without their headers: a hairline between them. */
+.v3-shell[data-rail="collapsed"] .v3-nav-group + .v3-nav-group {
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--v3-sidebar-border);
+}
+/* In rail mode a collapsed group would hide its items with no way to reach
+   them, so every group shows its icons. */
+.v3-shell[data-rail="collapsed"] .v3-nav-group[data-open="false"] .v3-nav-list { display: block; }
+
+/* -------------------------------------------------------------- HEADER ---- */
+
+.v3-main { display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; }
+
+.v3-header {
+    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+    height: var(--v3-header-h); padding: 0 var(--space-6);
+    background: rgba(255, 248, 239, 0.45);
+    backdrop-filter: blur(9px) saturate(145%);
+    -webkit-backdrop-filter: blur(9px) saturate(145%);
+    border-bottom: 1px solid rgba(255, 248, 239, 0.35);
+}
+.v3-header-search { flex: 1 1 auto; max-width: 460px; }
+.v3-search-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    height: 34px; padding: 0 8px 0 12px; cursor: pointer;
+    font-size: var(--text-sm); font-family: inherit; color: #6B5642;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: var(--v3-radius-item);
+}
+.v3-search-btn:hover { background: rgba(255, 255, 255, 0.75); }
+.v3-search-btn .kbd { margin-left: auto; }
+
+.v3-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.v3-header-btn {
+    position: relative; display: grid; place-items: center;
+    width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
+    background: rgba(255, 255, 255, 0.4); border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--v3-radius-item); color: var(--v3-ink); text-decoration: none;
+}
+.v3-header-btn:hover { background: rgba(255, 255, 255, 0.7); color: var(--v3-ink); text-decoration: none; }
+
+.v3-branch-select {
+    height: 34px; padding: 0 10px; font-size: var(--text-xs); font-family: inherit;
+    color: var(--v3-ink); background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.55); border-radius: var(--v3-radius-item);
+    max-width: 190px; cursor: pointer;
+}
+
+.v3-profile-btn {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    background: none; border: none; padding: 0 4px; font-family: inherit; text-align: left;
+}
+.v3-avatar {
+    width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center;
+    font-size: 11px; font-weight: var(--weight-bold); color: var(--v3-cream);
+    background: var(--v3-terracotta-deep); border-radius: var(--v3-radius-pill);
+}
+.v3-profile-name { display: block; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--v3-ink); }
+.v3-profile-role { display: block; font-size: 11px; font-weight: var(--weight-semibold); color: var(--v3-ink); margin-top: 1px; }
+
+.v3-badge-count {
+    position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px;
+    padding: 0 4px; display: grid; place-items: center;
+    font-size: 10px; font-weight: var(--weight-bold); color: #fff;
+    background: var(--v3-terracotta); border-radius: var(--v3-radius-pill);
+}
+
+/* ------------------------------------------------------------ VIEWPORT ---- */
+
+.v3-viewport { flex: 1; overflow-y: scroll; scrollbar-gutter: stable; }
+.v3-viewport::-webkit-scrollbar { width: 10px; }
+.v3-viewport::-webkit-scrollbar-track { background: rgba(30, 15, 8, 0.35); }
+.v3-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 238, 220, 0.55); border-radius: var(--v3-radius-pill);
+    border: 2px solid transparent; background-clip: padding-box;
+}
+
+.v3-page-head { padding: var(--space-6) var(--space-6) var(--space-4); }
+.v3-page-title {
+    margin: 0; font-size: 24px; font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-tight); color: var(--v3-title); text-shadow: var(--v3-title-shadow);
+}
+.v3-page-sub { margin: 5px 0 0; font-size: var(--text-sm); color: var(--v3-sub); text-shadow: var(--v3-title-shadow); }
+
+.v3-page-body {
+    padding: 0 var(--space-6) var(--space-10);
+    max-width: 1400px; display: flex; flex-direction: column; gap: var(--space-4);
+}
+
+/* ==========================================================================
+   GLASS SURFACES
+   ========================================================================== */
+
+.v3-card {
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+    overflow: hidden;
+    transition: box-shadow var(--duration-normal) var(--ease-standard),
+                transform var(--duration-normal) var(--ease-standard);
+}
+.v3-card-hover:hover {
+    box-shadow: 0 16px 34px rgba(58, 32, 20, 0.22), 0 0 0 1px rgba(180, 91, 52, 0.25), 0 0 24px rgba(180, 91, 52, 0.28);
+    transform: translateY(-3px);
+}
+
+.v3-card-head { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--v3-row-border); }
+.v3-card-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-bold); color: var(--v3-name); }
+.v3-card-note { margin: 2px 0 0; font-size: var(--text-xs); color: var(--v3-muted); }
+.v3-card-body { padding: var(--space-5); }
+
+.v3-grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); }
+@media (max-width: 1100px) { .v3-grid-2-1 { grid-template-columns: 1fr; } }
+
+/* --------------------------------------------------------------- KPIs ----- */
+
+.v3-kpis {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    padding-top: 6px; margin-top: -6px;
+}
+.v3-kpi {
+    display: flex; box-sizing: border-box; min-height: 136px; padding: 18px;
+    background: var(--v3-tone-bg-neutral);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-tone-border-neutral);
+    border-left: 3px solid var(--v3-tone-neutral);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+    text-decoration: none;
+}
+.v3-kpi:hover { text-decoration: none; }
+.v3-kpi[data-tone="positive"] { background: var(--v3-tone-bg-positive); border-color: var(--v3-tone-border-positive); border-left-color: var(--v3-positive); }
+.v3-kpi[data-tone="negative"] { background: var(--v3-tone-bg-negative); border-color: var(--v3-tone-border-negative); border-left-color: var(--v3-negative); }
+.v3-kpi[data-tone="caution"]  { background: var(--v3-tone-bg-caution);  border-color: var(--v3-tone-border-caution);  border-left-color: var(--v3-caution); }
+
+.v3-kpi-label {
+    font-size: 11px; font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--v3-muted);
+}
+.v3-kpi-value { font-size: 24px; font-weight: var(--weight-semibold); color: var(--v3-name); margin-top: 8px; line-height: var(--leading-tight); }
+.v3-kpi-delta { font-size: var(--text-xs); font-weight: var(--weight-semibold); margin-top: 6px; color: var(--v3-delta-neutral); }
+.v3-kpi-delta[data-tone="positive"] { color: var(--v3-delta-positive); }
+.v3-kpi-delta[data-tone="negative"] { color: var(--v3-delta-negative); }
+.v3-kpi-delta[data-tone="caution"]  { color: var(--v3-delta-caution); }
+
+/* ------------------------------------------------------------- LISTS ------ */
+
+.v3-list { padding: 6px var(--space-5); }
+.v3-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 13px 0; border-bottom: 1px solid var(--v3-row-border);
+}
+.v3-row:last-child { border-bottom: none; }
+.v3-row-main { flex: 1; min-width: 0; }
+.v3-row-title { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--v3-name); }
+.v3-row-detail { font-size: var(--text-xs); color: var(--v3-muted); margin-top: 2px; }
+
+.v3-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: var(--v3-radius-pill); flex-shrink: 0; background: var(--v3-tone-neutral); }
+.v3-dot[data-severity="high"]   { background: var(--v3-negative); }
+.v3-dot[data-severity="medium"] { background: var(--v3-caution); }
+.v3-dot[data-severity="low"]    { background: #8FBFF0; }
+
+.v3-ghost-btn {
+    display: inline-flex; align-items: center; flex-shrink: 0;
+    height: 28px; padding: 0 12px; cursor: pointer; text-decoration: none;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); font-family: inherit;
+    background: var(--v3-ghost-bg); color: var(--v3-name);
+    border: 1px solid var(--v3-card-border); border-radius: 8px;
+}
+.v3-ghost-btn:hover { background: rgba(255, 255, 255, 0.2); color: var(--v3-name); text-decoration: none; }
+
+.v3-action-btn {
+    display: inline-flex; align-items: center; flex-shrink: 0;
+    height: 30px; padding: 0 14px; cursor: pointer; text-decoration: none;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    background: var(--v3-terracotta); color: #fff;
+    border: none; border-radius: var(--v3-radius-item);
+}
+.v3-action-btn:hover { background: #9d4d2b; color: #fff; text-decoration: none; }
+
+.v3-badge {
+    flex-shrink: 0; padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: var(--weight-bold);
+    background: var(--v3-ghost-bg); color: var(--v3-muted);
+}
+.v3-badge[data-state="marked"]   { background: rgba(94, 166, 101, 0.16); color: var(--v3-positive); }
+.v3-badge[data-state="running"]  { background: rgba(224, 166, 74, 0.16); color: var(--v3-caution); }
+.v3-badge[data-state="missed"]   { background: rgba(224, 94, 74, 0.18); color: var(--v3-negative); }
+.v3-badge[data-state="upcoming"] { background: rgba(255, 248, 239, 0.08); color: var(--v3-muted); }
+
+/* --------------------------------------------------------- MINI CHARTS ---- */
+
+.v3-stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+.v3-stat-label { font-size: var(--text-xs); color: var(--v3-muted); }
+.v3-stat-value { font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--v3-name); margin-top: 4px; }
+.v3-rule { height: 1px; background: var(--v3-row-border); margin: 18px 0; }
+
+.v3-bars { display: flex; align-items: flex-end; gap: 12px; height: 130px; }
+.v3-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.v3-bar-value { font-size: 10px; color: var(--v3-muted); }
+.v3-bar { width: 100%; max-width: 34px; background: var(--v3-terracotta); border-radius: 4px 4px 0 0; }
+.v3-bar-label { font-size: 11px; color: var(--v3-muted); }
+
+.v3-meter { margin-bottom: 10px; }
+.v3-meter-head { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--v3-muted); margin-bottom: 4px; }
+.v3-meter-track { height: 8px; background: rgba(0, 0, 0, 0.12); border-radius: var(--v3-radius-pill); overflow: hidden; }
+.v3-meter-fill { height: 100%; background: var(--v3-terracotta); }
+
+.v3-scroll-cap { max-height: 340px; overflow-y: auto; }
+
+/* ---------------------------------------------------------- MESSAGING ----- */
+
+.v3-empty { padding: var(--space-6); text-align: center; font-size: var(--text-sm); color: var(--v3-muted); }
+.v3-error {
+    margin: var(--space-4) var(--space-6); padding: var(--space-4);
+    border-radius: var(--v3-radius-card);
+    background: rgba(224, 94, 74, 0.14); border: 1px solid rgba(240, 145, 124, 0.3);
+    color: var(--v3-name); font-size: var(--text-sm);
+}
+
+.v3-skeleton { padding: var(--space-10); text-align: center; color: var(--v3-sub); text-shadow: var(--v3-title-shadow); }
+
+/* ------------------------------------------------------------ RESPONSIVE -- */
+/* This app is desktop-only by design (natyam-mobile serves phones), but a
+   laptop at a narrow window or a half-screen split must still be usable —
+   the sidebar drops to its rail rather than the layout collapsing. */
+@media (max-width: 900px) {
+    .v3-shell { grid-template-columns: var(--v3-sidebar-rail) minmax(0, 1fr); }
+    /* Same set the explicit rail hides — including the group header and the
+       "soon" marker. An earlier version of this block omitted both, so a
+       narrow window showed group icons stacked on their own first item and a
+       column of SOON labels crammed into 64px. */
+    .v3-shell .v3-brand-text,
+    .v3-shell .v3-jump,
+    .v3-shell .v3-nav-group-btn,
+    .v3-shell .v3-nav-item-label,
+    .v3-shell .v3-nav-item[data-pending="true"]::after { display: none; }
+    .v3-shell .v3-nav-item { justify-content: center; padding: 8px 0; }
+    .v3-shell .v3-nav-group + .v3-nav-group {
+        margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--v3-sidebar-border);
+    }
+    .v3-shell .v3-nav-group[data-open="false"] .v3-nav-list { display: block; }
+
+    .v3-profile-name, .v3-profile-role { display: none; }
+    .v3-header { padding: 0 var(--space-4); gap: 8px; }
+    .v3-search-btn span:not(.kbd) { display: none; }
+    .v3-header-search { max-width: 44px; flex: 0 0 44px; }
+    .v3-branch-select { max-width: 120px; }
+
+    .v3-page-head { padding: var(--space-4) var(--space-4) var(--space-3); }
+    .v3-page-title { font-size: 20px; }
+    .v3-page-body { padding: 0 var(--space-4) var(--space-8); }
+    .v3-stat-row { grid-template-columns: 1fr; }
+    .v3-bars { height: 100px; }
+}
+
+/* ==========================================================================
+   PHONE — WRONG APP
+   --------------------------------------------------------------------------
+   natyam-admin is the desktop surface; phones have their own app
+   (natyam-mobile) with a bottom tab bar, built from the same design project.
+   Owner & Accountant can sign in to either, so someone genuinely can land
+   here on a phone — and a desktop ERP squeezed into 420px is not something
+   to quietly serve them. Say so, and keep the app reachable underneath for
+   anyone who insists.
+   ========================================================================== */
+.v3-small-screen-note {
+    display: none;
+    flex-shrink: 0;
+    margin: var(--space-4) var(--space-4) 0;
+    padding: var(--space-4);
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-left: 3px solid var(--v3-caution);
+    border-radius: var(--v3-radius-card);
+    color: var(--v3-name); font-size: var(--text-sm);
+}
+.v3-small-screen-note strong { display: block; margin-bottom: 4px; }
+.v3-small-screen-note span { color: var(--v3-muted); }
+
+/* Declared after the base rule, not before it: both selectors have the same
+   specificity, so source order decides — an earlier version put this media
+   query first and `display: none` simply won, leaving the notice permanently
+   hidden at every width. */
+@media (max-width: 620px) {
+    .v3-small-screen-note { display: block; }
+}
+
+/* ==========================================================================
+   STUDENTS (Stage 3)
+   Implemented from "Students.dc.html" (desktop half). Two shapes worth
+   naming: the roll is a compact card LIST, not a data table (which is why
+   components.css is still not needed by this app), and the profile is a
+   CENTRED MODAL, not v2's right-side drawer — the design project records
+   that swap as a direct request, not an artefact of the mock.
+   ========================================================================== */
+
+.v3-page-head-row {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: var(--space-4); flex-wrap: wrap;
+}
+.v3-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.v3-btn-md { height: 34px; padding: 0 14px; gap: 8px; font-size: var(--text-xs); }
+.v3-btn-sm { height: 32px; padding: 0 13px; font-size: var(--text-xs); }
+.v3-action-btn[disabled], .v3-ghost-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.v3-action-btn[disabled]:hover { background: var(--v3-terracotta); }
+
+/* ------------------------------------------------------------ FILTER BAR -- */
+
+.v3-filterbar {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: var(--space-4) var(--space-5);
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+}
+.v3-filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.v3-search-field {
+    flex: 1 1 260px; display: flex; align-items: center; gap: 8px;
+    height: 34px; padding: 0 12px;
+    background: rgba(255, 255, 255, 0.14); border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-item); color: var(--v3-muted);
+}
+.v3-search-field input {
+    flex: 1; min-width: 0; background: none; border: none; outline: none;
+    color: var(--v3-name); font: inherit; font-size: var(--text-sm);
+}
+.v3-search-field input::placeholder { color: var(--v3-muted); }
+
+.v3-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.v3-pill {
+    height: 30px; padding: 0 13px; cursor: pointer;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); font-family: inherit;
+    border-radius: var(--v3-radius-pill);
+    background: var(--v3-ghost-bg); color: var(--v3-name);
+    border: 1px solid var(--v3-card-border);
+}
+.v3-pill:hover { background: rgba(255, 255, 255, 0.2); }
+.v3-pill[aria-pressed="true"] { background: var(--v3-terracotta); border-color: var(--v3-terracotta); color: #fff; }
+
+.v3-select-label { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--v3-muted); }
+
+/* ----------------------------------------------------------------- ROLL --- */
+
+.v3-roll { padding: 12px 16px; max-height: 62vh; overflow-y: auto; }
+.v3-roll-row {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+    width: 100%; padding: 7px 8px; cursor: pointer; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--v3-row-border);
+    border-radius: var(--v3-radius-item); font-family: inherit;
+}
+.v3-roll-row:hover { background: rgba(255, 248, 239, 0.1); }
+.v3-roll-index { width: 22px; flex-shrink: 0; font-size: var(--text-xs); color: var(--v3-muted); text-align: right; }
+.v3-roll-main { min-width: 0; flex: 1; }
+.v3-roll-name { display: block; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--v3-name); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v3-roll-meta { display: block; font-size: 11px; color: var(--v3-muted); }
+.v3-roll-badges { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.v3-chip {
+    display: inline-flex; padding: 2px 8px; border-radius: 6px;
+    font-size: 10.5px; font-weight: var(--weight-bold);
+    background: var(--v3-ghost-bg); color: var(--v3-muted);
+    border: 1px solid var(--v3-card-border); white-space: nowrap;
+}
+.v3-chip[data-fee="overdue"] { background: rgba(224, 94, 74, 0.18); color: var(--v3-negative); border-color: rgba(240, 145, 124, 0.3); }
+.v3-chip[data-fee="due"]     { background: rgba(224, 166, 74, 0.16); color: var(--v3-caution); border-color: rgba(240, 193, 119, 0.3); }
+.v3-chip[data-fee="clear"]   { background: rgba(94, 166, 101, 0.16); color: var(--v3-positive); border-color: rgba(143, 217, 154, 0.3); }
+.v3-chip[data-status="active"]   { background: rgba(94, 166, 101, 0.14); color: var(--v3-positive); }
+.v3-chip[data-status="on_leave"] { background: rgba(224, 166, 74, 0.14); color: var(--v3-caution); }
+.v3-chip[data-status="inactive"] { background: rgba(224, 94, 74, 0.14); color: var(--v3-negative); }
+
+/* ---------------------------------------------------------------- MODAL --- */
+
+.v3-modal-scrim {
+    position: fixed; inset: 0; z-index: var(--z-modal);
+    display: flex; align-items: center; justify-content: center; padding: var(--space-8);
+    background: rgba(20, 11, 6, 0.55);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.v3-modal {
+    width: 100%; max-width: 700px; max-height: 100%; overflow-y: auto;
+    background: var(--v3-card-bg);
+    backdrop-filter: blur(12px) saturate(136%); -webkit-backdrop-filter: blur(12px) saturate(136%);
+    border: 1px solid var(--v3-card-border);
+    border-radius: 18px;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4);
+    animation: v3-modal-in var(--duration-normal) var(--ease-entrance);
+}
+@keyframes v3-modal-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } to { opacity: 1; transform: none; } }
+
+.v3-modal-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: var(--space-4); padding: 22px var(--space-6) 0;
+}
+.v3-modal-title { margin: 0; font-size: 19px; font-weight: var(--weight-semibold); color: var(--v3-name); }
+.v3-modal-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--v3-muted); }
+.v3-modal-close {
+    flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer;
+    background: var(--v3-ghost-bg); border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-pill); color: var(--v3-name);
+}
+.v3-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+.v3-ops { display: flex; flex-wrap: wrap; gap: 8px; padding: var(--space-4) var(--space-6) 0; }
+
+.v3-tabs {
+    display: flex; gap: 4px; padding: var(--space-4) var(--space-6) 0;
+    border-bottom: 1px solid var(--v3-row-border); overflow-x: auto;
+}
+.v3-tab {
+    flex-shrink: 0; height: 32px; padding: 0 13px; cursor: pointer;
+    font-size: 12.5px; font-weight: var(--weight-medium); font-family: inherit;
+    background: none; border: none; border-radius: 7px 7px 0 0;
+    color: var(--v3-muted);
+}
+.v3-tab:hover { color: var(--v3-name); background: var(--v3-ghost-bg); }
+.v3-tab[aria-selected="true"] { background: var(--v3-nav-active-bg); color: var(--v3-nav-active); }
+
+.v3-modal-body { padding: var(--space-5) var(--space-6) var(--space-6); display: flex; flex-direction: column; gap: 14px; }
+.v3-modal-note { margin: 0; font-size: var(--text-sm); color: var(--v3-muted); }
+
+.v3-modal-foot {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px var(--space-6) 22px; border-top: 1px solid var(--v3-row-border);
+}
+
+.v3-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.v3-metric {
+    padding: 12px 14px; border-radius: 11px;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--v3-row-border);
+}
+.v3-metric-label { font-size: 10.5px; color: var(--v3-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.v3-metric-value { font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--v3-name); margin-top: 4px; }
+
+.v3-notice { padding: 12px 14px; border-radius: 10px; font-size: 12.5px; color: var(--v3-name); }
+.v3-notice[data-tone="caution"] { background: rgba(214, 164, 44, 0.16); border: 1px solid rgba(214, 164, 44, 0.4); }
+.v3-notice[data-tone="info"]    { background: rgba(94, 166, 101, 0.14); border: 1px solid rgba(94, 166, 101, 0.3); }
+
+.v3-facts {
+    margin: 0; padding: 14px 16px; border-radius: 11px;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid var(--v3-row-border);
+    display: flex; flex-direction: column; gap: 8px;
+    font-size: var(--text-sm); color: var(--v3-name);
+}
+.v3-fact { display: flex; justify-content: space-between; gap: var(--space-4); }
+.v3-fact dt { color: var(--v3-muted); }
+.v3-fact dd { margin: 0; text-align: right; }
+
+@media (max-width: 900px) {
+    .v3-metrics { grid-template-columns: 1fr; }
+    .v3-modal-scrim { padding: var(--space-3); }
+}
+
+/* ==========================================================================
+   ATTENDANCE — THE REGISTER (Stage 5)
+   No approved v3 design exists for this screen (see docs/design/README.md).
+   The interaction is ported from v2 — "everybody starts present, marking is
+   one tap" — and dressed in the v3 system already proven on Dashboard and
+   Students. Reconcile against Attendance.dc.html if it is ever recovered.
+   ========================================================================== */
+
+.v3-register-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: var(--space-4); flex-wrap: wrap;
+}
+
+.v3-register { padding: 10px 14px; max-height: 58vh; overflow-y: auto; }
+
+/* One roster row. Present is the resting state and is deliberately quiet —
+   a teacher scanning the list should see the *absences*, not a wall of
+   equally-loud rows. Absent is the state that shouts. */
+.v3-mark {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+    width: 100%; min-height: var(--tap-target); padding: 10px 12px; margin-bottom: 4px;
+    cursor: pointer; text-align: left; font-family: inherit;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--v3-row-border);
+    border-left: 3px solid var(--v3-positive);
+    border-radius: var(--v3-radius-item);
+    transition: background var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard);
+}
+.v3-mark:hover { background: rgba(255, 248, 239, 0.1); }
+.v3-mark[data-status="absent"] {
+    background: rgba(224, 94, 74, 0.16);
+    border-color: rgba(240, 145, 124, 0.35);
+    border-left-color: var(--v3-negative);
+}
+.v3-mark[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.v3-mark-main { min-width: 0; flex: 1; }
+.v3-mark-name {
+    display: block; font-size: var(--text-base); font-weight: var(--weight-semibold);
+    color: var(--v3-name); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.v3-mark-meta { display: block; font-size: 11px; color: var(--v3-muted); margin-top: 1px; }
+
+.v3-mark-state {
+    flex-shrink: 0; padding: 3px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: var(--weight-bold);
+    background: rgba(94, 166, 101, 0.16); color: var(--v3-positive);
+}
+.v3-mark[data-status="absent"] .v3-mark-state {
+    background: rgba(224, 94, 74, 0.2); color: var(--v3-negative);
+}
+
+/* The save bar sits with the register rather than floating: on desktop the
+   roster scrolls inside its own card, so the action never leaves the screen. */
+.v3-register-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-4); flex-wrap: wrap;
+    padding: var(--space-4) var(--space-5);
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+}
+.v3-register-hint { font-size: var(--text-xs); color: var(--v3-muted); }
+
+/* ==========================================================================
+   ADMISSIONS (Stage 6)
+   No approved v3 design exists for this screen either (see
+   docs/design/README.md). The status ladder is the service's — see
+   nextActionFor() in admissions.service.js — and these chips only colour it.
+   ========================================================================== */
+
+/* The ladder reads as a temperature: nothing waiting on us is neutral,
+   anything sitting in our court is warm, done is green, refused is red. */
+.v3-chip[data-admission="draft"]     { background: rgba(255, 248, 239, 0.08); color: var(--v3-muted); }
+.v3-chip[data-admission="submitted"] { background: rgba(62, 125, 191, 0.18); color: #8FBFF0; border-color: rgba(143, 191, 240, 0.3); }
+.v3-chip[data-admission="reviewing"] { background: rgba(224, 166, 74, 0.16); color: var(--v3-caution); border-color: rgba(240, 193, 119, 0.3); }
+.v3-chip[data-admission="approved"]  { background: rgba(224, 166, 74, 0.22); color: var(--v3-caution); border-color: rgba(240, 193, 119, 0.4); }
+.v3-chip[data-admission="enrolled"]  { background: rgba(94, 166, 101, 0.16); color: var(--v3-positive); border-color: rgba(143, 217, 154, 0.3); }
+.v3-chip[data-admission="rejected"]  { background: rgba(224, 94, 74, 0.18); color: var(--v3-negative); border-color: rgba(240, 145, 124, 0.3); }
+
+/* The pipeline strip reuses the KPI card, but these are plain counts with no
+   delta line — let them sit shorter than a dashboard KPI. */
+.v3-page-body .v3-kpis .v3-kpi { min-height: 96px; padding: 14px 16px; }
+
+/* ==========================================================================
+   TIMETABLE — THE WEEK (Stage 7)
+   `Timetable.dc.html` was lost, but one instruction from the design project's
+   change log survived and is honoured: tiles show ONLY the batch name and
+   time slot. The stacked levels / teacher / room line was deliberately
+   dropped in v2.25.0 — a grid stops being a grid when every cell is a
+   paragraph. Teacher and level live on the tile's tooltip instead.
+   ========================================================================== */
+
+.v3-week {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px;
+    align-items: start;
+}
+
+.v3-week-day {
+    display: flex; flex-direction: column; min-width: 0;
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+    overflow: hidden;
+}
+/* Today's column is the one a person is looking for; give it the accent edge
+   rather than making them read seven dates. */
+.v3-week-day[data-today="true"] { border-color: rgba(180, 91, 52, 0.6); box-shadow: 0 0 0 1px rgba(180, 91, 52, 0.35), var(--v3-card-shadow); }
+
+.v3-week-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
+    padding: 10px 12px; border-bottom: 1px solid var(--v3-row-border);
+}
+.v3-week-day-name {
+    font-size: 11px; font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--v3-nav-active);
+}
+.v3-week-date { font-size: 11px; color: var(--v3-muted); white-space: nowrap; }
+
+.v3-week-slots { display: flex; flex-direction: column; gap: 6px; padding: 10px; min-height: 80px; }
+.v3-week-empty { margin: 0; text-align: center; color: var(--v3-muted); font-size: var(--text-sm); }
+
+.v3-slot {
+    display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+    width: 100%; padding: 9px 10px; cursor: pointer; text-align: left;
+    font-family: inherit; min-width: 0;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--v3-row-border);
+    border-left: 3px solid var(--v3-tone-neutral);
+    border-radius: var(--v3-radius-item);
+    transition: background var(--duration-fast) var(--ease-standard);
+}
+.v3-slot:hover:not([disabled]) { background: rgba(255, 248, 239, 0.12); }
+.v3-slot[disabled] { cursor: default; opacity: 0.75; }
+
+/* Wraps to two lines rather than truncating. Seven columns leaves roughly
+   125px per tile, and "Foundation Level 1" does not fit on one line at that
+   width — ellipsis turned every tile into "Foundation Lev…", which tells a
+   reader nothing and defeats the point of the grid. The design's instruction
+   was name + time; it did not ask for an unreadable name. Two lines is the
+   cap: past that a tile starts becoming the paragraph v2.25.0 removed. */
+.v3-slot-name {
+    font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--v3-name);
+    max-width: 100%; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow-wrap: anywhere; line-height: var(--leading-snug);
+}
+.v3-slot-time { font-size: 10.5px; color: var(--v3-muted); white-space: nowrap; }
+
+/* The five states a slot can be in. Marked recedes, "needs marking" is the
+   one that should catch the eye — the same principle as the register itself. */
+.v3-slot[data-state="marked"]      { border-left-color: var(--v3-positive); }
+.v3-slot[data-state="due"]         { border-left-color: var(--v3-negative); background: rgba(224, 94, 74, 0.14); }
+.v3-slot[data-state="upcoming"]    { border-left-color: var(--v3-tone-neutral); }
+.v3-slot[data-state="cancelled"]   { border-left-color: var(--v3-muted); opacity: 0.5; text-decoration: line-through; }
+.v3-slot[data-state="replacement"] { border-left-color: var(--v3-caution); background: rgba(224, 166, 74, 0.12); }
+
+.v3-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.v3-legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: var(--text-xs); color: var(--v3-muted); }
+.v3-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; background: var(--v3-tone-neutral); }
+.v3-swatch[data-state="marked"]      { background: var(--v3-positive); }
+.v3-swatch[data-state="due"]         { background: var(--v3-negative); }
+.v3-swatch[data-state="upcoming"]    { background: var(--v3-tone-neutral); }
+.v3-swatch[data-state="cancelled"]   { background: var(--v3-muted); }
+.v3-swatch[data-state="replacement"] { background: var(--v3-caution); }
+
+/* Seven columns stop being readable well before the sidebar rail kicks in.
+   Below 1200px the week becomes a stack of days, which is still a week —
+   just read downward. */
+@media (max-width: 1200px) {
+    .v3-week { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+    .v3-week { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==========================================================================
+   FEE COLLECTION (Stage 8)
+   Fees was never part of the Claude Design project at all, so unlike
+   Attendance/Admissions there is not even a lost file to reconcile against.
+   Built from the v3 system already proven across five screens.
+   ========================================================================== */
+
+.v3-ageing { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+.v3-ageing-cell {
+    padding: 12px 14px; border-radius: 11px;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--v3-row-border);
+}
+
+/* ---- one open invoice, with its collect form expanding inline ---- */
+
+.v3-invoice {
+    border: 1px solid var(--v3-row-border);
+    border-left: 3px solid var(--v3-caution);
+    border-radius: 11px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+}
+.v3-invoice[data-overdue="true"] {
+    border-left-color: var(--v3-negative);
+    background: rgba(224, 94, 74, 0.1);
+}
+.v3-invoice-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-4); padding: 12px 14px;
+}
+.v3-invoice-amount { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* The collect form. Expands under the invoice it belongs to rather than
+   opening a second dialog — the amount and the balance it settles should be
+   readable at the same time, or somebody will collect against the wrong one. */
+.v3-pay { padding: 0 14px 14px; border-top: 1px solid var(--v3-row-border); }
+.v3-pay-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; padding-top: 12px;
+}
+.v3-pay-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-4); flex-wrap: wrap; margin-top: 12px;
+}
+
+.v3-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.v3-field > span { font-size: 11px; color: var(--v3-muted); }
+.v3-field[hidden] { display: none; }
+
+.v3-input {
+    width: 100%; min-height: 34px; padding: 0 10px;
+    font: inherit; font-size: var(--text-sm); color: var(--v3-name);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-item);
+}
+.v3-input:focus {
+    outline: none; border-color: var(--v3-terracotta);
+    box-shadow: 0 0 0 3px rgba(180, 91, 52, 0.25);
+}
+/* The date input's own picker glyph is near-invisible on dark glass. */
+.v3-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+
+@media (max-width: 900px) {
+    .v3-ageing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .v3-invoice-head { flex-wrap: wrap; }
+}
+
+/* ==========================================================================
+   NOTIFICATIONS (Stage 10)
+   Never part of the Claude Design project. Severity comes from the service's
+   own centre() mapping — this only colours it.
+   ========================================================================== */
+
+.v3-note {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 13px 0; border-bottom: 1px solid var(--v3-row-border);
+}
+.v3-note:last-child { border-bottom: none; }
+/* A read row recedes rather than disappearing — it is still a record, just
+   not a task any more. */
+.v3-note[data-read="true"] { opacity: 0.55; }
+
+.v3-note-icon {
+    flex-shrink: 0; width: 30px; height: 30px; margin-top: 1px;
+    display: grid; place-items: center; border-radius: 9px;
+    background: var(--v3-ghost-bg); color: var(--v3-muted);
+}
+.v3-note-icon[data-severity="error"]   { background: rgba(224, 94, 74, 0.18); color: var(--v3-negative); }
+.v3-note-icon[data-severity="warning"] { background: rgba(224, 166, 74, 0.18); color: var(--v3-caution); }
+.v3-note-icon[data-severity="success"] { background: rgba(94, 166, 101, 0.18); color: var(--v3-positive); }
+.v3-note-icon[data-severity="info"]    { background: rgba(62, 125, 191, 0.18); color: #8FBFF0; }
+
+.v3-note-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.v3-icon-btn {
+    display: grid; place-items: center; width: 28px; height: 28px; cursor: pointer;
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--v3-muted);
+}
+.v3-icon-btn:hover { background: var(--v3-ghost-bg); color: var(--v3-name); border-color: var(--v3-card-border); }
+
+@media (max-width: 900px) {
+    .v3-note { flex-wrap: wrap; }
+    .v3-note-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* ==========================================================================
+   MY ACCOUNT (Stage 10)
+   ========================================================================== */
+
+.v3-identity { display: flex; align-items: flex-start; gap: var(--space-5); }
+.v3-identity-avatar {
+    flex-shrink: 0; width: 64px; height: 64px; display: grid; place-items: center;
+    font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--v3-cream);
+    background: var(--v3-terracotta-deep); border-radius: var(--v3-radius-pill);
+}
+@media (max-width: 700px) {
+    .v3-identity { flex-direction: column; align-items: center; text-align: center; }
+    .v3-identity .v3-facts { width: 100%; }
+}
+
+/* ---- batches: seat-occupancy chips (Stage 11) ---- */
+.v3-chip[data-seats="full"]  { background: rgba(224, 166, 74, 0.18); color: var(--v3-caution); border-color: rgba(240, 193, 119, 0.3); }
+.v3-chip[data-seats="empty"] { background: rgba(224, 94, 74, 0.14); color: var(--v3-negative); border-color: rgba(240, 145, 124, 0.28); }
+.v3-chip[data-seats="open"]  { background: rgba(94, 166, 101, 0.14); color: var(--v3-positive); border-color: rgba(143, 217, 154, 0.28); }
+
+/* ==========================================================================
+   SETTINGS (Stage 12)
+   Structure from the design project's own change log — nine tabs, in order,
+   role-gated. The role matrix is the only table in either app; it is a
+   genuine matrix (capability x role) and a card list cannot express it.
+   ========================================================================== */
+
+/* Page-level tabs sit on the page, not inside a modal, so they need their own
+   surface rather than the modal variant's borderless strip. */
+.v3-tabs-page {
+    padding: 6px;
+    background: var(--v3-card-bg);
+    backdrop-filter: var(--v3-glass-blur); -webkit-backdrop-filter: var(--v3-glass-blur);
+    border: 1px solid var(--v3-card-border);
+    border-bottom: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-card);
+    box-shadow: var(--v3-card-shadow);
+    gap: 4px; flex-wrap: wrap;
+}
+.v3-tabs-page .v3-tab { border-radius: var(--v3-radius-item); height: 34px; }
+
+.v3-matrix-wrap { overflow-x: auto; padding: 0 var(--space-5) var(--space-5); }
+.v3-matrix { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.v3-matrix th, .v3-matrix td {
+    padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--v3-row-border);
+    white-space: nowrap;
+}
+.v3-matrix thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: rgba(30, 15, 8, 0.75);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    color: var(--v3-nav-active); font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-caps); text-transform: uppercase; font-size: 10.5px;
+}
+.v3-matrix tbody th {
+    font-weight: var(--weight-medium); color: var(--v3-name);
+    white-space: normal; min-width: 200px;
+}
+.v3-matrix td { text-align: center; color: var(--v3-positive); }
+/* A blank cell means "not granted" — the absence is the information, so it is
+   left genuinely blank rather than filled with a cross that adds visual noise
+   to a table that is mostly negative space. */
+.v3-matrix td[data-granted="false"] { background: rgba(0, 0, 0, 0.12); }
+.v3-matrix tbody tr:hover th, .v3-matrix tbody tr:hover td { background: rgba(255, 248, 239, 0.06); }
+
+/* ==========================================================================
+   FORMS (Stage 13)
+   The v3 form layer — see js/ui/form.js for the validation contract. Not v2's
+   components.css form system, which this app has never loaded.
+   ========================================================================== */
+
+/* Mounted on <body>, above everything, so a form can be opened from any page
+   without that page needing a host element. */
+.v3-form-host { position: relative; z-index: var(--z-modal); }
+.v3-form-modal { max-width: 560px; }
+.v3-form-modal .v3-modal-body { gap: 16px; }
+
+.v3-req { color: var(--v3-negative); margin-left: 3px; }
+
+.v3-field > label {
+    font-size: 11.5px; font-weight: var(--weight-semibold); color: var(--v3-muted);
+}
+.v3-field-help  { font-size: 11px; color: var(--v3-muted); }
+.v3-field-error { font-size: 11.5px; font-weight: var(--weight-semibold); color: var(--v3-negative); }
+
+/* An invalid field is marked on the field, not just the message, so the eye
+   lands on the control that needs fixing rather than on the sentence. */
+.v3-field[data-invalid="true"] .v3-input {
+    border-color: var(--v3-negative);
+    box-shadow: 0 0 0 3px rgba(224, 94, 74, 0.22);
+}
+
+.v3-textarea { min-height: 76px; padding: 10px; resize: vertical; line-height: var(--leading-normal); }
+
+/* Money reads as money: the unit sits in the field, so the number beside it is
+   unambiguous without a label repeating "in rupees". */
+.v3-money-wrap { position: relative; display: block; }
+.v3-money-prefix {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    font-size: var(--text-sm); color: var(--v3-muted); pointer-events: none;
+}
+.v3-money-input { padding-left: 26px; }
+
+.v3-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; min-height: 34px; }
+.v3-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.v3-switch-track {
+    width: 40px; height: 22px; flex-shrink: 0; border-radius: var(--v3-radius-pill);
+    background: rgba(255, 255, 255, 0.18); border: 1px solid var(--v3-card-border);
+    position: relative; transition: background var(--duration-fast) var(--ease-standard);
+}
+.v3-switch-track::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: var(--v3-cream);
+    transition: transform var(--duration-fast) var(--ease-standard);
+}
+.v3-switch input:checked + .v3-switch-track { background: var(--v3-terracotta); border-color: var(--v3-terracotta); }
+.v3-switch input:checked + .v3-switch-track::after { transform: translateX(18px); }
+.v3-switch input:focus-visible + .v3-switch-track { box-shadow: 0 0 0 3px rgba(180, 91, 52, 0.35); }
+.v3-switch-label { font-size: var(--text-sm); color: var(--v3-name); }
+
+/* ---------------------------------------------------------------------------
+   NATIVE SELECT POPUPS
+   ---------------------------------------------------------------------------
+   The closed <select> is glass like every other input, but the *open* popup is
+   drawn by the OS, not by us: it cannot inherit backdrop-filter, and on
+   Windows/Chrome it paints on its own white sheet. Our inputs set
+   `color: var(--v3-name)` — white in both variants — so the options rendered
+   white-on-white and only the highlighted row was readable.
+
+   Options therefore get an explicit *opaque* surface. This is one of the few
+   places the glass language has to be abandoned rather than adapted, because
+   the element being styled is not ours to composite.
+   -------------------------------------------------------------------------- */
+.v3-input, .v3-branch-select {
+    /* Chrome/Edge use this for the popup sheet itself, not just the rows. */
+    color-scheme: dark;
+}
+.v3-input option, .v3-branch-select option,
+.v3-input optgroup, .v3-branch-select optgroup {
+    background-color: #2A1710;
+    color: #FFFFFF;
+}
+.v3-input option:checked, .v3-branch-select option:checked {
+    background-color: var(--v3-terracotta);
+    color: #FFFFFF;
+}
+.v3-input option:disabled, .v3-branch-select option:disabled {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Multi-select tick-boxes, styled as chips. The native checkbox stays in the
+   DOM (focusable, announced, keyboard-toggled) and is visually replaced by its
+   sibling chip — the same trick .v3-switch uses. */
+.v3-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.v3-check { cursor: pointer; }
+.v3-check input {
+    position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
+}
+.v3-check-chip {
+    display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px;
+    font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    color: var(--v3-name);
+    background: var(--v3-ghost-bg);
+    border: 1px solid var(--v3-card-border);
+    border-radius: var(--v3-radius-pill);
+    transition: background var(--duration-fast) var(--ease-standard);
+}
+.v3-check:hover .v3-check-chip { background: rgba(255, 255, 255, 0.2); }
+.v3-check input:checked + .v3-check-chip {
+    background: var(--v3-terracotta); border-color: var(--v3-terracotta); color: #fff;
+}
+.v3-check input:focus-visible + .v3-check-chip {
+    box-shadow: 0 0 0 3px rgba(180, 91, 52, 0.35);
+}
+.v3-field[data-invalid="true"] .v3-check-chip { border-color: var(--v3-negative); }
+
+/* Two fields side by side — start/end times, which are meaningless apart. */
+.v3-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Section heading inside a long form. A rule with a name on it — the student
+   form runs to eighteen fields and reads as a wall without them. */
+.v3-form-divider {
+    margin: 8px 0 0; padding-top: 14px;
+    border-top: 1px solid var(--v3-row-border);
+    font-size: 11px; font-weight: var(--weight-bold);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--v3-muted);
+}
+.v3-form-modal .v3-modal-body > .v3-form-divider:first-child {
+    margin-top: 0; padding-top: 0; border-top: none;
+}
+
+/* Long tick-box groups: a filter above, a running count below, and a capped
+   height so a 158-student cast picker cannot push the submit button out of a
+   dialog that the person then cannot finish. */
+.v3-checks-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.v3-checks-filter { min-height: 32px; font-size: var(--text-xs); }
+.v3-checks-wrap .v3-checks { max-height: 210px; overflow-y: auto; padding-right: 2px; }
+.v3-check[hidden] { display: none; }
+
+/* Two cards side by side — income accounts against expense accounts, which
+   only mean anything read against each other. Collapses on a narrow window. */
+.v3-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+@media (max-width: 900px) { .v3-two-col { grid-template-columns: 1fr; } }
+
+/* Horizontal income/expenditure bars for the finance trend.
+   Deliberately NOT .v3-bars — that is the vertical column chart, whose .v3-bar
+   caps at 34px wide and would silently clamp a percentage width to nothing. */
+.v3-trend { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.v3-trend-bar { display: block; height: 6px; border-radius: 3px; min-width: 2px; }
+.v3-trend-bar[data-tone="positive"] { background: var(--v3-positive); }
+.v3-trend-bar[data-tone="negative"] { background: var(--v3-negative); }
+
+/* ==========================================================================
+   REPORT TABLES
+   --------------------------------------------------------------------------
+   The one place v3 renders a real table. Everywhere else the design replaced
+   tables with card lists, and rightly — but a report IS a grid: it is printed,
+   exported to a spreadsheet and handed to an accountant, and its columns are
+   declared by the service. Cards would make it unexportable and unreadable at
+   once.
+
+   It scrolls inside its own container so the PAGE never scrolls sideways, which
+   is the rule that makes a wide table tolerable rather than hostile.
+   ========================================================================== */
+
+.v3-table-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    margin: 0 var(--space-6) var(--space-6);
+    border: 1px solid var(--v3-row-border); border-radius: 12px;
+}
+.v3-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.v3-table th, .v3-table td {
+    padding: 10px 14px; text-align: left; white-space: nowrap;
+    border-bottom: 1px solid var(--v3-row-border);
+}
+.v3-table th {
+    position: sticky; top: 0; z-index: 1;
+    font-size: var(--text-xs); font-weight: var(--weight-bold);
+    letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--v3-muted);
+    background: var(--v3-card-bg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.v3-table td { color: var(--v3-name); }
+.v3-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+.v3-table tbody tr:last-child td { border-bottom: none; }
+.v3-table tfoot td {
+    font-weight: var(--weight-bold); color: var(--v3-name);
+    border-top: 1px solid var(--v3-card-border); border-bottom: none;
+    background: rgba(255, 255, 255, 0.04);
+}
