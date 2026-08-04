@@ -52,6 +52,7 @@ const PATHS = {
     'chevron-left':  '<path d="m15 5-7 7 7 7"/>',
     'chevron-right': '<path d="m9 5 7 7-7 7"/>',
     'chevrons-left': '<path d="m11 5-7 7 7 7M19 5l-7 7 7 7"/>',
+    'chevrons-right':'<path d="m13 5 7 7-7 7M5 5l7 7-7 7"/>',
     'arrow-up':      '<path d="M12 20V4"/><path d="m5 11 7-7 7 7"/>',
     'arrow-down':    '<path d="M12 4v16"/><path d="m5 13 7 7 7-7"/>',
     'arrow-right':   '<path d="M4 12h16"/><path d="m13 5 7 7-7 7"/>',

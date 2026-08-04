@@ -56,6 +56,12 @@ export default class AnalyticsPage extends Page {
                 </div>
                 <div class="v3-head-actions" data-role="ranges"></div>
             </div>
+                <div class="v3-tabs" role="tablist" style="margin-top:12px;">
+                    <a class="v3-tab" href="#/analytics" role="tab"
+                       aria-selected="true">Insights</a>
+                    <a class="v3-tab" href="#/analytics/reports" role="tab"
+                       aria-selected="false">Reports</a>
+                </div>
             <div class="v3-page-body" data-role="body">
                 <div class="v3-skeleton">Gathering ten views of the school…</div>
             </div>

@@ -71,6 +71,10 @@ export default class ReportsPage extends Page {
                 </div>
                 <div class="v3-head-actions" data-role="exports"></div>
             </div>
+                <div class="v3-tabs" role="tablist" style="margin-top:12px;">
+                    <a class="v3-tab" href="#/analytics" role="tab" aria-selected="false">Insights</a>
+                    <a class="v3-tab" href="#/analytics/reports" role="tab" aria-selected="true">Reports</a>
+                </div>
             <div class="v3-page-body">
                 <section class="v3-card" data-role="picker"></section>
                 <div data-role="filters"></div>

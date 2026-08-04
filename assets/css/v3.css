@@ -299,6 +299,10 @@
    icon directly above its first item's icon, which read as a duplicated
    row (Overview's `home` sitting on top of Dashboard's `home`). Twenty
    glyphs in a 64px column with no labels is not navigation. */
+/* The toggle is the only thing left in the rail's header — centre it rather
+   than leaving it pinned right by `margin-left: auto` (UAT BUG-207). */
+.v3-shell[data-rail="collapsed"] .v3-rail-toggle { margin: 0 auto; }
+
 .v3-shell[data-rail="collapsed"] .v3-brand-text,
 .v3-shell[data-rail="collapsed"] .v3-jump,
 .v3-shell[data-rail="collapsed"] .v3-nav-group-btn,

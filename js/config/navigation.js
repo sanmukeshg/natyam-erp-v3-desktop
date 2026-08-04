@@ -81,7 +81,19 @@ export const NAVIGATION = Object.freeze([
         items: [
             { path: '/analytics', label: 'Analytics', icon: 'trending-up', cap: CAPABILITIES.REPORT_VIEW,
               load: () => import('../modules/reports/analytics.page.js') },
-            { path: '/reports', label: 'Reports', icon: 'file-text', cap: CAPABILITIES.REPORT_VIEW,
+            /*
+             * UAT ENH-202. Reports is no longer a separate navigation entry —
+             * it is a section of Analytics, reached by the tab strip on that
+             * page. It stays in this list because ROUTES is derived from it, so
+             * removing it outright would unregister the route; `hidden` keeps
+             * the route and drops the sidebar link.
+             *
+             * The path is nested under /analytics so the shell's existing
+             * prefix match lights up Analytics while Reports is open, with no
+             * special case in markActive().
+             */
+            { path: '/analytics/reports', label: 'Reports', icon: 'file-text',
+              cap: CAPABILITIES.REPORT_VIEW, hidden: true,
               load: () => import('../modules/reports/reports.page.js') },
             { path: '/notifications', label: 'Notifications', icon: 'bell', cap: CAPABILITIES.STUDENT_VIEW,
               load: () => import('../modules/notifications/notifications.page.js') },

@@ -69,9 +69,16 @@ export class Shell {
                             <span class="v3-brand-name">NATYAM</span>
                             <span class="v3-brand-sub">School of Kuchipudi</span>
                         </span>
+                        <!--
+                            UAT BUG-207. The glyph follows the state: pointing
+                            left it offers to collapse, pointing right it offers
+                            to expand. It used to point left in both states, so
+                            once collapsed it read as "collapse further" — the
+                            aria-label already flipped, the icon did not.
+                        -->
                         <button class="v3-rail-toggle" data-action="rail"
                                 aria-label="${this.railCollapsed ? 'Expand navigation' : 'Collapse navigation to icons'}">
-                            ${raw(icon('chevrons-left', { size: 14 }))}
+                            ${raw(icon(this.railCollapsed ? 'chevrons-right' : 'chevrons-left', { size: 14 }))}
                         </button>
                     </div>
 
@@ -148,6 +155,7 @@ export class Shell {
         `);
 
         this.paintNav();
+        this.paintRailToggle();
         this.paintBranch();
         this.paintUser();
         this.bind();
@@ -184,6 +192,18 @@ export class Shell {
             }
         }
         return null;
+    }
+
+    /**
+     * Points the toggle at what it will do next: left to collapse, right to
+     * expand. Called on mount and on every toggle, so the glyph, the accessible
+     * name and the actual state can never disagree.
+     */
+    paintRailToggle(button = this.root.querySelector('[data-action="rail"]')) {
+        if (!button) return;
+        button.setAttribute('aria-label',
+            this.railCollapsed ? 'Expand navigation' : 'Collapse navigation to icons');
+        button.innerHTML = icon(this.railCollapsed ? 'chevrons-right' : 'chevrons-left', { size: 14 });
     }
 
     paintNav() {
@@ -310,11 +330,16 @@ export class Shell {
             this.paintNav();
         });
 
-        on(this.root, 'click', '[data-action="rail"]', () => {
+        on(this.root, 'click', '[data-action="rail"]', (_e, target) => {
             this.railCollapsed = !this.railCollapsed;
             this.root.querySelector('[data-role="shell"]')
                 .setAttribute('data-rail', this.railCollapsed ? 'collapsed' : 'expanded');
             session.setPref('sidebar', this.railCollapsed ? 'collapsed' : 'expanded');
+
+            // The button is rendered once by mount(), so its glyph and label
+            // have to be refreshed here or they keep describing the state the
+            // sidebar was in when the shell was built (UAT BUG-207).
+            this.paintRailToggle(target);
         });
 
         on(this.root, 'input', '[data-role="jump"]', (_e, target) => {

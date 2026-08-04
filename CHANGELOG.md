@@ -12,6 +12,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
+## [3.2.0] — unreleased
+
+Second UAT round. Every desktop item in
+`Bugs_and_Enhancements_v3_Mobile and Desktop - Round 2.docx`.
+
+### Changed
+
+- **Reports is no longer a separate navigation item** (ENH-202). It is a section of Analytics,
+  reached by a tab strip on that page. The entry stays in `NAVIGATION` marked `hidden` because
+  `ROUTES` is derived from that list — removing it outright would unregister the route. The path
+  moved to `/analytics/reports` so the shell's existing prefix match lights up Analytics while
+  Reports is open, with no special case in `markActive()`.
+
+### Fixed
+
+- **The sidebar collapse button did not say which way it goes** (BUG-207). It kept pointing left
+  once collapsed, reading as "collapse further". The glyph now follows the state, and the button
+  is repainted on toggle rather than only at mount — `mount()` draws it once, so setting the
+  `data-rail` attribute alone left the icon and the accessible name describing the state the
+  sidebar was in when the shell was built. Added `chevrons-right` to the icon set, and centred
+  the toggle in the 64px rail where it was pinned right by `margin-left: auto`.
+
 ## [3.1.0] — unreleased
 
 First UAT round. Every item in `Bugs_and_Enhancements_v3_Desktop.docx`, which was the
