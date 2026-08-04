@@ -95,6 +95,14 @@
     --v3-tone-border-neutral:  rgba(255, 248, 239, 0.16);
     --v3-tone-neutral:         rgba(255, 248, 239, 0.4);
 
+    /* Timetable slot states. "Upcoming" and "Cancelled" both used to resolve to
+       the same cream at different alphas (tone-neutral 0.4 vs muted 0.7), which
+       is why they read as the same colour. Upcoming now takes the brand
+       terracotta — no other state uses it — and Cancelled a flat desaturated
+       grey that reads as "off" rather than "faint". */
+    --v3-slot-upcoming:  var(--v3-terracotta);
+    --v3-slot-cancelled: rgba(160, 152, 146, 0.9);
+
     --v3-delta-positive: #8FD99A;
     --v3-delta-negative: #F0917C;
     --v3-delta-caution:  #F0C177;
@@ -154,6 +162,9 @@
     --v3-tone-border-caution:  rgba(240, 193, 119, 0.45);
     --v3-tone-border-neutral:  rgba(255, 255, 255, 0.35);
     --v3-tone-neutral:         rgba(255, 255, 255, 0.5);
+
+    --v3-slot-upcoming:  var(--v3-terracotta);
+    --v3-slot-cancelled: rgba(120, 112, 106, 0.85);
 
     /* Delta text sits ON those tints, so it lightens with them — the dark
        ramp (#3E6B31 …) was legible only against the pastel fills above. */
@@ -914,8 +925,9 @@
    one that should catch the eye — the same principle as the register itself. */
 .v3-slot[data-state="marked"]      { border-left-color: var(--v3-positive); }
 .v3-slot[data-state="due"]         { border-left-color: var(--v3-negative); background: rgba(224, 94, 74, 0.14); }
-.v3-slot[data-state="upcoming"]    { border-left-color: var(--v3-tone-neutral); }
-.v3-slot[data-state="cancelled"]   { border-left-color: var(--v3-muted); opacity: 0.5; text-decoration: line-through; }
+.v3-slot[data-state="upcoming"]    { border-left-color: var(--v3-slot-upcoming); background: rgba(180, 91, 52, 0.12); }
+/* Strike-through kept, per the UAT note — only the colour changed. */
+.v3-slot[data-state="cancelled"]   { border-left-color: var(--v3-slot-cancelled); opacity: 0.55; text-decoration: line-through; }
 .v3-slot[data-state="replacement"] { border-left-color: var(--v3-caution); background: rgba(224, 166, 74, 0.12); }
 
 .v3-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); }
@@ -923,8 +935,8 @@
 .v3-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; background: var(--v3-tone-neutral); }
 .v3-swatch[data-state="marked"]      { background: var(--v3-positive); }
 .v3-swatch[data-state="due"]         { background: var(--v3-negative); }
-.v3-swatch[data-state="upcoming"]    { background: var(--v3-tone-neutral); }
-.v3-swatch[data-state="cancelled"]   { background: var(--v3-muted); }
+.v3-swatch[data-state="upcoming"]    { background: var(--v3-slot-upcoming); }
+.v3-swatch[data-state="cancelled"]   { background: var(--v3-slot-cancelled); }
 .v3-swatch[data-state="replacement"] { background: var(--v3-caution); }
 
 /* Seven columns stop being readable well before the sidebar rail kicks in.
@@ -1293,5 +1305,35 @@
 .v3-table tfoot td {
     font-weight: var(--weight-bold); color: var(--v3-name);
     border-top: 1px solid var(--v3-card-border); border-bottom: none;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* ==========================================================================
+   STACKED SECTIONS INSIDE A PANEL  (UAT: desktop BUG-002, BUG-003)
+   --------------------------------------------------------------------------
+   .v3-page-body already spaces its DIRECT children, which is why most screens
+   look right. Fees and Finance render several stacked blocks — the KPI strip,
+   then "How old the dues are", then account cards — inside ONE wrapper
+   (`[data-role="summary"]` / `[data-role="panel"]`), so the page-body gap
+   applied around that wrapper and nothing separated the blocks within it. The
+   tiles therefore sat flush against the next section.
+
+   Giving those wrappers the same column gap as their parent fixes it with the
+   existing spacing token, so the rhythm stays identical to every other screen
+   rather than becoming a second, slightly different spacing.
+   ========================================================================== */
+.v3-page-body > [data-role="summary"],
+.v3-page-body > [data-role="panel"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+/* A read-only input is still a real value, so it keeps the field shape — but
+   it must not invite typing. Dimmed and non-interactive, matching the disabled
+   treatment used on buttons. */
+.v3-input[readonly] {
+    opacity: 0.6;
+    cursor: default;
     background: rgba(255, 255, 255, 0.04);
 }

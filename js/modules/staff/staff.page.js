@@ -57,7 +57,7 @@ export default class StaffPage extends Page {
         this.container = container;
 
         render(container, html`
-            <div class="v3-page-head">
+            <div class="v3-page-head v3-page-head-row">
                 <div>
                     <h1 class="v3-page-title">Staff</h1>
                     <p class="v3-page-sub" data-role="subtitle">Loading…</p>

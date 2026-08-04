@@ -36,6 +36,7 @@ import {
 } from '../../services/programs.service.js';
 import { listBranches } from '../../services/settings.service.js';
 import { listStaff } from '../../services/staff.service.js';
+import { listBatches } from '../../services/batches.service.js';
 import { formModal, confirmModal } from '../../ui/form.js';
 
 const FILTERS = [
@@ -67,7 +68,7 @@ export default class ProgramsPage extends Page {
         this.container = container;
 
         render(container, html`
-            <div class="v3-page-head">
+            <div class="v3-page-head v3-page-head-row">
                 <div>
                     <h1 class="v3-page-title">Programmes</h1>
                     <p class="v3-page-sub" data-role="subtitle">Loading…</p>
@@ -411,22 +412,68 @@ export default class ProgramsPage extends Page {
 
         const current = this.detail.participants.map((s) => s.id);
 
+        /*
+         * UAT ENH-003 — cast selection filters by BRANCH then BATCH, replacing
+         * the level-based list.
+         *
+         * The filters narrow what is *shown*; they never change what is
+         * selected. `setParticipants()` replaces the cast wholesale, so if
+         * filtering to one batch silently dropped everyone else, casting a
+         * second batch would remove the first. Ticks therefore survive every
+         * filter change — the same rule the search filter follows — and the
+         * dialog says how many are selected across the whole programme.
+         */
+        const [branches, batches] = await Promise.all([
+            listBranches().catch(() => []),
+            listBatches(null, { includeClosed: false }).catch(() => [])
+        ]);
+
+        const inBranch = (s, branchId) => !branchId || s.branchId === branchId;
+        const inBatch = (s, batchId) => !batchId || s.batchId === batchId;
+
         const saved = await formModal({
             title: `Cast for ${p.name}`,
             description: `${eligible.length} student${eligible.length === 1 ? '' : 's'} eligible. `
+                       + 'Filter by branch and batch to find them; ticks are kept as you filter. '
                        + 'This replaces the current cast — anyone unticked is taken out.',
             submitLabel: 'Save cast',
             fields: [
+                { name: 'branchId', label: 'Branch', type: 'select', reactive: true,
+                  placeholder: 'All branches',
+                  options: branches.map((b) => ({ value: b.id, label: b.name })) },
+
+                // Batches narrow to the chosen branch, so the list cannot offer
+                // a batch that holds nobody the branch filter would show.
+                { name: 'batchId', label: 'Batch', type: 'select', reactive: true,
+                  placeholder: 'All batches',
+                  options: (v) => batches
+                      .filter((b) => !v.branchId || b.branchId === v.branchId)
+                      .map((b) => ({ value: b.id, label: b.name })) },
+
                 // eligibleStudents() returns raw student documents, so the level
-                // is a code — resolve it here rather than printing "foundation-3".
+                // is a code — resolved here rather than printing "foundation-3".
                 { name: 'participants', label: 'Taking part', type: 'checks', itemNoun: 'student',
-                  options: eligible.map((s) => ({
-                      value: s.id,
-                      label: `${s.name}${s.level ? ` — ${levelLabel(s.level)}` : ''}`
-                  })) }
+                  options: (v) => eligible
+                      .filter((s) => inBranch(s, v.branchId) && inBatch(s, v.batchId))
+                      .map((s) => ({
+                          value: s.id,
+                          label: `${s.name}${s.level ? ` — ${levelLabel(s.level)}` : ''}`
+                      })) }
             ],
-            values: { participants: current },
-            onSubmit: (v) => setParticipants(p.id, v.participants)
+            values: { branchId: '', batchId: '', participants: current },
+            /*
+             * The filters are a view, not part of the record. Submitting the
+             * visible ticks alone would drop everyone the current filter hides,
+             * so the hidden selections are merged back in before saving.
+             */
+            onSubmit: (v) => {
+                const visible = new Set(eligible
+                    .filter((s) => inBranch(s, v.branchId) && inBatch(s, v.batchId))
+                    .map((s) => s.id));
+                const keptOutsideFilter = current.filter((id) => !visible.has(id));
+                const chosen = [...new Set([...v.participants, ...keptOutsideFilter])];
+                return setParticipants(p.id, chosen);
+            }
         });
 
         if (!saved) return;

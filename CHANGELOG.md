@@ -12,6 +12,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
+## [3.1.0] — unreleased
+
+First UAT round. Every item in `Bugs_and_Enhancements_v3_Desktop.docx`, which was the
+sole source of truth for this round — no undocumented changes.
+
+### Added
+
+- **Master data is editable** (BUG-001). Branches, Fee plans, Curriculum and Users could all
+  be created but never edited, so a typo in a branch code or a fee amount was permanent. Each
+  editor reuses its create field list, seeded from the record, and hands the whole set to the
+  service — which keeps owning validation. Editing a fee plan reports how many students are
+  billed against it; a curriculum entry's stored value is shown read-only, because existing
+  records point at it.
+- **Programme cast filters** (ENH-003). The cast picker offered 158 students in one flat list.
+  It now filters by branch and batch, and ticks made outside the current filter are preserved
+  and merged back on submit, so narrowing to one batch cannot silently drop another.
+- **Form layer: value-dependent fields** (`js/ui/form.js`). `options` may now be a function
+  of the form's current values, paired with `reactive: true` on the field being chosen from;
+  `readonly` is also supported. Added for ENH-003 rather than special-casing one dialog.
+
+### Fixed
+
+- **Action buttons sat below the page title** on Staff, Programmes, Certificates, Finance,
+  Analytics, Reports and Profile (ENH-001, ENH-004, ENH-005). All seven used
+  `v3-page-head` — which only sets padding — instead of the established
+  `v3-page-head-row`. One wrong class, seven symptoms.
+- **Stacked blocks touched each other** on Fees and Finance (BUG-002, BUG-003).
+  `.v3-page-body` spaces only its *direct* children, and both pages nest several blocks
+  inside one wrapper. Those wrappers now carry the same `--space-4` rhythm as every other
+  screen.
+- **Timetable legend was unreadable** (ENH-002). "Upcoming" and "Cancelled" rendered the same
+  colour. Both now have their own token; all five states are distinct. The strike-through on
+  cancelled sessions is unchanged.
+- **Conditional attributes rendered as text.** `html`` escapes its interpolated values, so
+  `data-reactive="true"` was being painted as visible text rather than becoming an attribute
+  — ENH-003's filters never fired. Emitted through `raw()`. Found while verifying, not
+  reported.
+
 ## [3.0.0] — unreleased
 
 The desktop half of the v3 split. **Not yet feature-complete** — see

@@ -62,10 +62,16 @@ import { icon } from './icons.js';
  *     skipped by both the value reader and the validator.
  *   - `tel` and `email` are the plain input path with the matching type, which
  *     is what gets a phone keypad on a touch device.
+ *   - `readonly: true` shows a value without letting it be edited. Used where
+ *     the value is real and worth seeing but genuinely immutable.
  *
  * `showIf: (values) => boolean` makes a field conditional. A hidden field is
  * skipped by the validator too — a required field nobody can see must never be
  * able to block the submit.
+ *
+ * `options` may be an array OR `(values) => [...]`, so one field can narrow
+ * another. Pair it with `reactive: true` on the field being chosen from — that
+ * repaints the form on change so the dependent options rebuild.
  *
  * `validateAll: (values) => ({ field: message }|null)` is a form-level pass for
  * rules that belong to no single field. It runs after the per-field pass and
@@ -124,7 +130,9 @@ export function formModal({
                     // register that reads "Wed, Mon" is a small daily papercut.
                     const ticked = new Set([...formEl.querySelectorAll(`[name="${f.name}"]:checked`)]
                         .map((n) => n.value));
-                    out[f.name] = (f.options || []).map((o) => String(o.value))
+                    const declared = typeof f.options === 'function'
+                        ? (f.options(out) || []) : (f.options || []);
+                    out[f.name] = declared.map((o) => String(o.value))
                         .filter((v) => ticked.has(v));
                 } else if (f.type === 'number' || f.type === 'money') {
                     const v = raw[f.name];
@@ -241,7 +249,7 @@ export function formModal({
                                     ${formError}
                                 </div>
                             ` : ''}
-                            ${fields.map((f) => fieldMarkup(f, current[f.name], errors[f.name]))}
+                            ${fields.map((f) => fieldMarkup(f, current[f.name], errors[f.name], current))}
                         </form>
 
                         <div class="v3-modal-foot">
@@ -323,6 +331,11 @@ export function formModal({
         }
         paintCheckCounts();
 
+        on(host, 'change', '[data-reactive="true"]', () => {
+            current = readCurrent();
+            paint();
+        });
+
         on(host, 'input', '[data-checks-filter]', (event, target) => {
             const group = host.querySelector(`[data-checks="${target.dataset.checksFilter}"]`);
             if (!group) return;
@@ -358,7 +371,7 @@ export function formModal({
 
 /* ------------------------------------------------------------------- FIELDS */
 
-function fieldMarkup(f, value, error) {
+function fieldMarkup(f, value, error, values = {}) {
     // A labelled rule, not an input. Long forms (the student one runs to
     // eighteen fields) are unreadable as one undifferentiated column.
     if (f.type === 'divider') {
@@ -374,22 +387,33 @@ function fieldMarkup(f, value, error) {
             <label for="${id}">
                 ${f.label}${f.required ? html`<span class="v3-req" aria-hidden="true">*</span>` : ''}
             </label>
-            ${control(f, id, value, described)}
+            ${control(f, id, value, described, values)}
             ${f.help ? html`<span class="v3-field-help" id="${id}-help">${f.help}</span>` : ''}
             ${error ? html`<span class="v3-field-error" id="${id}-error" role="alert">${error}</span>` : ''}
         </div>
     `;
 }
 
-function control(f, id, value, described) {
+function control(f, id, value, described, values = {}) {
     const common = `id="${id}" name="${f.name}"`;
     const aria = described ? `aria-describedby="${described}"` : '';
 
+    /*
+     * Options may be a function of the form's current values, so one field can
+     * narrow another — the programme cast picker shows the students of the
+     * chosen branch and batch. Static arrays still work unchanged; this only
+     * adds a second accepted shape.
+     */
+    const optionsOf = (field) => (typeof field.options === 'function'
+        ? (field.options(values) || [])
+        : (field.options || []));
+
     if (f.type === 'select') {
         return html`
-            <select class="v3-input" id="${id}" name="${f.name}" aria-describedby="${described}">
+            <select class="v3-input" id="${id}" name="${f.name}" aria-describedby="${described}"
+                    ${f.reactive ? raw(' data-reactive="true"') : ''}>
                 ${f.placeholder ? html`<option value="">${f.placeholder}</option>` : ''}
-                ${(f.options || []).map((o) => html`
+                ${optionsOf(f).map((o) => html`
                     <option value="${o.value}" ${String(value) === String(o.value) ? 'selected' : ''}>${o.label}</option>
                 `)}
             </select>
@@ -401,7 +425,7 @@ function control(f, id, value, described) {
     // announced as a set of checkboxes without any scripting to maintain.
     if (f.type === 'checks') {
         const chosen = new Set((Array.isArray(value) ? value : []).map(String));
-        const options = f.options || [];
+        const options = optionsOf(f);
         // Past a couple of dozen chips the group stops being scannable — the
         // programme cast picker offers every active student, 158 of them here.
         // The filter only hides chips; it never unticks one, so a search does
@@ -461,7 +485,8 @@ function control(f, id, value, described) {
         f.max !== undefined ? `max="${f.max}"` : '',
         f.type === 'money' ? 'step="1" inputmode="numeric"' : (f.step ? `step="${f.step}"` : ''),
         f.maxLength ? `maxlength="${f.maxLength}"` : '',
-        f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''
+        f.autocomplete ? `autocomplete="${f.autocomplete}"` : '',
+        f.readonly ? 'readonly' : ''
     ].filter(Boolean).join(' ');
 
     return raw(`

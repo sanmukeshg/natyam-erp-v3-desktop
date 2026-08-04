@@ -22,14 +22,21 @@
  * Add curriculum/programme-type/expense-category entry, and Add user — all
  * through js/ui/form.js.
  *
- * ADD, NOT EDIT, on the lists. Renaming, reordering and deactivating a
- * master-set entry are the operations that carry risk: `masterEntryUsage()`
- * exists precisely so an entry already in use cannot be quietly removed, and
- * doing it properly needs a list editor with a usage check per row rather than
- * a one-field dialog. Adding is separable and safe, so it ships now instead of
- * waiting behind that. Same for records — `updateFeePlan()` reports back how
- * many students are affected going forward, and that answer deserves to be
- * shown, not swallowed.
+ * EDITING (UAT desktop BUG-001). Branches, fee plans, curriculum entries and
+ * users can all now be opened and edited from their row. Each editor reuses the
+ * same field list as its create counterpart, seeded from the record, and hands
+ * the whole set to the service — which owns validation.
+ *
+ * Two consequences are surfaced rather than swallowed:
+ *   - `updateFeePlan()` reports how many students are billed on the plan going
+ *     forward, so changing an amount is not a silent act. Invoices already
+ *     raised keep their own amounts.
+ *   - A master-set entry's **stored value is immutable** — `updateMasterEntry()`
+ *     pins it because existing records point at that key. The dialog shows it
+ *     read-only rather than hiding it, so that is a stated fact, not a surprise.
+ *
+ * Reordering and deleting master-set entries remain out of scope: they need a
+ * per-row `masterEntryUsage()` check, and the UAT asked for editing.
  *
  * THE USER FORM AND THE GUARDRAIL. `requireRoleAssignable()` in the service
  * refuses to let anyone without `role.manage` create an Administrator —
@@ -70,7 +77,8 @@ import {
     institute, listBranches, listFeePlans, listMasterSet, MASTER_SETS,
     listUsers, roleMatrix, listAcademicYears,
     createBranch, createFeePlan, createAcademicYear,
-    updateInstitute, addMasterEntry, createUser
+    updateInstitute, addMasterEntry, createUser,
+    updateBranch, updateFeePlan, updateMasterEntry, updateUser
 } from '../../services/settings.service.js';
 import { search as searchAudit } from '../../services/audit.service.js';
 import {
@@ -282,6 +290,10 @@ export default class SettingsPage extends Page {
                                 <span class="v3-chip" data-fee="${b.status === 'active' ? 'clear' : ''}">
                                     ${titleCase(b.status || 'active')}
                                 </span>
+                                ${session.can(CAPABILITIES.SETTINGS_EDIT) ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-branch"
+                                            data-id="${b.id}">Edit</button>
+                                ` : ''}
                             </div>
                         `)}
                     </div>
@@ -309,6 +321,10 @@ export default class SettingsPage extends Page {
                                 <span class="v3-chip" data-fee="${p.status === 'active' ? 'clear' : ''}">
                                     ${titleCase(p.status || 'active')}
                                 </span>
+                                ${session.can(CAPABILITIES.SETTINGS_EDIT) ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-plan"
+                                            data-id="${p.id}">Edit</button>
+                                ` : ''}
                             </div>
                         `)}
                     </div>
@@ -335,6 +351,10 @@ export default class SettingsPage extends Page {
                                     <span class="v3-chip" data-fee="${e.status === 'active' ? 'clear' : ''}">
                                         ${titleCase(e.status || 'active')}
                                     </span>
+                                    ${session.can(CAPABILITIES.SETTINGS_EDIT) ? html`
+                                        <button class="v3-ghost-btn v3-btn-sm" data-action="edit-entry"
+                                                data-set="${set}" data-value="${e.value}">Edit</button>
+                                    ` : ''}
                                 </div>
                             `)}
                         </div>
@@ -366,6 +386,10 @@ export default class SettingsPage extends Page {
                                 <span class="v3-chip" data-fee="${u.status === 'active' ? 'clear' : 'overdue'}">
                                     ${titleCase(u.status || 'active')}
                                 </span>
+                                ${session.can(CAPABILITIES.USER_EDIT) ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-user"
+                                            data-id="${u.id}">Edit</button>
+                                ` : ''}
                             </div>
                         `)}
                     </div>
@@ -583,6 +607,11 @@ export default class SettingsPage extends Page {
         this.onDispose(on(root, 'click', '[data-action="add-plan"]', () => this.addFeePlan()));
         this.onDispose(on(root, 'click', '[data-action="add-year"]', () => this.addYear()));
         this.onDispose(on(root, 'click', '[data-action="edit-institute"]', () => this.editInstitute()));
+        this.onDispose(on(root, 'click', '[data-action="edit-branch"]', (_e, t) => this.editBranch(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="edit-plan"]', (_e, t) => this.editFeePlan(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="edit-entry"]', (_e, t) =>
+            this.editMasterEntry(t.dataset.set, t.dataset.value)));
+        this.onDispose(on(root, 'click', '[data-action="edit-user"]', (_e, t) => this.editUser(t.dataset.id)));
         this.onDispose(on(root, 'click', '[data-action="take-backup"]', () => this.takeBackup()));
         this.onDispose(on(root, 'click', '[data-action="export-one"]', () => this.exportOne()));
         this.onDispose(on(root, 'click', '[data-action="erase-all"]', () => this.eraseAll()));
@@ -827,6 +856,213 @@ export default class SettingsPage extends Page {
 
         if (!created) return;
         toast.success('User added', `${created.name} can now sign in.`);
+        this.data.users = null;
+        await this.loadTab();
+    }
+
+
+    /* ------------------------------------------------------------- EDITING */
+    /*
+     * UAT desktop BUG-001. Every master-data section could create but not edit,
+     * so a typo in a branch code or a fee amount was permanent. Each editor
+     * below reuses the same field list as its create counterpart, seeded from
+     * the existing record, and hands the whole set to the service — which owns
+     * validation and the guardrails this page does not reimplement.
+     */
+
+    async editBranch(id) {
+        const branch = (this.data.branches || []).find((b) => b.id === id);
+        if (!branch) return;
+
+        const saved = await formModal({
+            title: `Edit ${branch.name}`,
+            description: 'Shown on registers, receipts and reports.',
+            submitLabel: 'Save changes',
+            fields: [
+                { name: 'name', label: 'Branch name', required: true },
+                { name: 'code', label: 'Short code', required: true, maxLength: 10,
+                  help: 'Used on registers and receipts. Stored in capitals.' },
+                { name: 'address', label: 'Address', type: 'textarea', rows: 2 },
+                { name: 'phone', label: 'Phone', type: 'tel' },
+                { name: 'email', label: 'Email', type: 'email' }
+            ],
+            values: {
+                name: branch.name || '', code: branch.code || '',
+                address: branch.address || '', phone: branch.phone || '',
+                email: branch.email || ''
+            },
+            onSubmit: (v) => updateBranch(id, { ...v, code: String(v.code || '').toUpperCase() })
+        });
+
+        if (!saved) return;
+        toast.success('Branch updated', saved.name);
+        this.data.branches = null;
+        await this.loadTab();
+    }
+
+    /**
+     * Editing a fee plan.
+     *
+     * `updateFeePlan()` returns `{ plan, affected }` — how many students sit on
+     * this plan going forward. That answer is surfaced rather than swallowed:
+     * changing an amount while dozens of students are billed against it is
+     * exactly the kind of change somebody needs to see land. Invoices already
+     * raised keep their own amounts; the service does not touch them.
+     */
+    async editFeePlan(id) {
+        const plan = (this.data.feePlans || []).find((p) => p.id === id);
+        if (!plan) return;
+
+        const saved = await formModal({
+            title: `Edit ${plan.name}`,
+            description: 'Invoices already raised keep the amount they were raised at.',
+            submitLabel: 'Save changes',
+            fields: [
+                { name: 'name', label: 'Plan name', required: true },
+                { name: 'amount', label: 'Fee', type: 'money', required: true, min: 1,
+                  help: 'Charged each period, in whole rupees.' },
+                { name: 'frequency', label: 'Charged', type: 'select', required: true,
+                  options: exposedFeeFrequencies().map((f) => ({ value: f.value, label: f.label })) },
+                { name: 'registrationFee', label: 'One-off registration fee', type: 'money', min: 0 },
+                { name: 'costumeFee', label: 'One-off costume fee', type: 'money', min: 0 }
+            ],
+            values: {
+                name: plan.name || '', amount: plan.amount ?? '',
+                frequency: plan.frequency || 'monthly',
+                registrationFee: plan.registrationFee ?? '',
+                costumeFee: plan.costumeFee ?? ''
+            },
+            onSubmit: (v) => updateFeePlan(id, v)
+        });
+
+        if (!saved) return;
+        toast.success('Fee plan updated', saved.affected
+            ? `${formatNumber(saved.affected)} student${saved.affected === 1 ? '' : 's'} billed on this plan going forward.`
+            : 'No student is on this plan yet.');
+        this.data.feePlans = null;
+        await this.loadTab();
+    }
+
+    /**
+     * Editing a curriculum / programme-type / expense-category entry.
+     *
+     * The label and the status are editable; the **stored value is not**.
+     * `updateMasterEntry()` pins it deliberately (`value: entry.value`) because
+     * existing records point at that key — changing it would orphan them. The
+     * dialog shows it read-only rather than hiding it, so the immutability is
+     * visible rather than surprising.
+     */
+    async editMasterEntry(setName, value) {
+        const group = (this.data.master || []).find((m) => m.set === setName);
+        const entry = group?.entries.find((e) => e.value === value);
+        if (!entry) return;
+
+        const others = (group.entries || []).filter((e) => e.value !== value);
+
+        const saved = await formModal({
+            title: `Edit ${entry.label}`,
+            description: `In ${group.meta.label.toLowerCase()}. Appears wherever this list is offered.`,
+            submitLabel: 'Save changes',
+            fields: [
+                { name: 'label', label: 'Name', required: true,
+                  help: 'What people see in the dropdown.' },
+                { name: 'storedValue', label: 'Stored value', readonly: true,
+                  help: 'Cannot be changed — existing records point at it.' },
+                { name: 'status', label: 'Status', type: 'select',
+                  options: [
+                      { value: 'active', label: 'Active — offered in dropdowns' },
+                      { value: 'inactive', label: 'Inactive — hidden from new records' }
+                  ],
+                  help: 'Making an entry inactive hides it from new records; anything already '
+                      + 'using it keeps it.' }
+            ],
+            values: {
+                label: entry.label || '',
+                storedValue: entry.value,
+                status: entry.status || 'active'
+            },
+            // A duplicate label is confusing even when the stored keys differ —
+            // the dropdown would offer the same words twice.
+            validateAll: (v) => {
+                const label = String(v.label || '').trim().toLowerCase();
+                return label && others.some((e) => e.label.trim().toLowerCase() === label)
+                    ? { label: `"${v.label.trim()}" is already in this list.` } : null;
+            },
+            onSubmit: (v) => updateMasterEntry(setName, value, {
+                label: String(v.label).trim(),
+                status: v.status
+            })
+        });
+
+        if (!saved) return;
+        toast.success('Entry updated', group.meta.label);
+        this.data.master = null;
+        await this.loadTab();
+    }
+
+    /**
+     * Editing a user.
+     *
+     * The same guardrail as creation, and for the same reason: the role list
+     * omits Administrator unless the caller holds `role.manage`, so an Owner is
+     * never offered a choice `requireRoleAssignable()` would refuse. The service
+     * also refuses *any* edit to an existing Administrator account without that
+     * capability — this page does not reimplement that, it just lets the
+     * message through.
+     *
+     * Passwords are absent: `updateUser()` only toggles which methods are
+     * permitted, it never creates or changes a Firebase Auth credential.
+     */
+    async editUser(id) {
+        const user = (this.data.users || []).find((u) => u.id === id);
+        if (!user) return;
+
+        const roles = roleMatrix().roles
+            .filter((r) => r.value !== 'administrator' || session.can(CAPABILITIES.ROLE_MANAGE))
+            .map((r) => ({ value: r.value, label: r.label }));
+
+        const saved = await formModal({
+            title: `Edit ${user.name}`,
+            description: session.can(CAPABILITIES.ROLE_MANAGE)
+                ? 'Changes which account details and sign-in methods are permitted.'
+                : 'Only an Administrator can grant or edit the Administrator role, so it is not offered.',
+            submitLabel: 'Save changes',
+            fields: [
+                { name: 'name', label: 'Full name', required: true },
+                { name: 'role', label: 'Role', type: 'select', required: true, options: roles },
+                { name: 'status', label: 'Status', type: 'select',
+                  options: [
+                      { value: 'active', label: 'Active — can sign in' },
+                      { value: 'inactive', label: 'Inactive — cannot sign in' }
+                  ] },
+                { name: 'authMethods', label: 'Sign-in methods', type: 'checks', required: true,
+                  itemNoun: 'sign-in method',
+                  options: [
+                      { value: 'google', label: 'Google' },
+                      { value: 'password', label: 'Email & password' },
+                      { value: 'mobile', label: 'Mobile OTP' }
+                  ],
+                  help: 'Permits a method — it does not create a password. '
+                      + 'An account needs at least one.' },
+                { name: 'email', label: 'Email', type: 'email',
+                  showIf: (v) => (v.authMethods || []).some((m) => m === 'google' || m === 'password') },
+                { name: 'mobile', label: 'Mobile number', type: 'tel',
+                  showIf: (v) => (v.authMethods || []).includes('mobile'),
+                  help: 'Must be unique — Mobile OTP resolves an identity by number alone.' }
+            ],
+            values: {
+                name: user.name || '',
+                role: user.role || '',
+                status: user.status || 'active',
+                authMethods: Array.isArray(user.authMethods) ? user.authMethods : [],
+                email: user.email || '',
+                mobile: user.mobile || ''
+            },
+            onSubmit: (v) => updateUser(id, v)
+        });
+
+        if (!saved) return;
+        toast.success('User updated', saved.name || user.name);
         this.data.users = null;
         await this.loadTab();
     }
