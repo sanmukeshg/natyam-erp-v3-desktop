@@ -85,6 +85,12 @@ import {
     backupStatus, downloadBackup, exportStore, inspectBackup, restore, resetEverything
 } from '../../services/backup.service.js';
 import { formModal, confirmModal } from '../../ui/form.js';
+import { SECTIONS, CONTENT_KINDS, BLOCK_TYPES } from '../../config/websiteContent.config.js';
+import {
+    listSections, saveSection, unpublishSection,
+    readField, buildItem, fieldName, validateItem
+} from '../../services/websiteContent.service.js';
+import { upload, remove as removeUpload, validateFile, UPLOAD_SCOPES } from '../../services/upload.service.js';
 
 /** Same nine tabs, same order, same gating as the reference page. */
 const TABS = [
@@ -92,6 +98,11 @@ const TABS = [
     { key: 'branches', label: 'Branches', cap: null },
     { key: 'fees', label: 'Fee plans', cap: null },
     { key: 'curriculum', label: 'Curriculum', cap: null },
+    // The public-facing content management system. Sits with the other
+    // reference-data tabs rather than in its own module because that is what
+    // it is: the school describing itself, edited in one place, read by the
+    // parent app and later by the Natyam website.
+    { key: 'website', label: 'Website Content', cap: null },
     { key: 'users', label: 'Users', cap: CAPABILITIES.USER_VIEW },
     { key: 'roles', label: 'Roles', cap: null },
     { key: 'preferences', label: 'Preferences', cap: null },
@@ -120,6 +131,8 @@ export default class SettingsPage extends Page {
         this.tab = this.query.tab || null;
         this.data = {};
         this.loading = false;
+        /** Which Website Content section is open, or null for the list. */
+        this.websiteKey = null;
     }
 
     /** Tabs this caller can actually open. An array `cap` means "any of these". */
@@ -178,6 +191,8 @@ export default class SettingsPage extends Page {
                 const sets = Object.keys(MASTER_SETS);
                 const lists = await Promise.all(sets.map((s) => listMasterSet(s)));
                 this.data.master = sets.map((s, i) => ({ set: s, meta: MASTER_SETS[s], entries: lists[i] }));
+            } else if (this.tab === 'website' && !this.data.website) {
+                this.data.website = await listSections();
             } else if (this.tab === 'users' && !this.data.users) {
                 this.data.users = await listUsers();
             } else if (this.tab === 'roles' && !this.data.roles) {
@@ -214,6 +229,7 @@ export default class SettingsPage extends Page {
             case 'branches':    return this.branchesPanel();
             case 'fees':        return this.feePlansPanel();
             case 'curriculum':  return this.curriculumPanel();
+            case 'website':     return this.websitePanel();
             case 'users':       return this.usersPanel();
             case 'roles':       return this.rolesPanel();
             case 'preferences': return this.preferencesPanel();
@@ -621,6 +637,481 @@ export default class SettingsPage extends Page {
         this.onDispose(on(root, 'click', '[data-action="add-user"]', () => this.addUser()));
         this.onDispose(on(root, 'click', '[data-action^="add-entry:"]', (_e, t) =>
             this.addMasterEntry(t.dataset.action.split(':')[1])));
+
+        /* ---- Website Content ---- */
+        this.onDispose(on(root, 'click', '[data-action="website-open"]', (_e, t) => {
+            this.websiteKey = t.dataset.key;
+            this.paint();
+        }));
+        this.onDispose(on(root, 'click', '[data-action="website-back"]', () => {
+            this.websiteKey = null;
+            this.paint();
+        }));
+        this.onDispose(on(root, 'click', '[data-action="website-head"]', () => this.websiteEditHead()));
+        this.onDispose(on(root, 'click', '[data-action="website-add-item"]', () => this.websiteItemForm()));
+        this.onDispose(on(root, 'click', '[data-action="website-edit-item"]', (_e, t) =>
+            this.websiteItemForm(Number(t.dataset.index))));
+        this.onDispose(on(root, 'click', '[data-action="website-del-item"]', (_e, t) =>
+            this.websiteCommit((e) => { e.items.splice(Number(t.dataset.index), 1); })));
+        this.onDispose(on(root, 'click', '[data-action="website-move"]', (_e, t) =>
+            this.websiteCommit((e) => moveWithin(e.items, Number(t.dataset.index), Number(t.dataset.dir)))));
+
+        this.onDispose(on(root, 'click', '[data-action="website-add-para"]', () => this.websiteParagraphForm()));
+        this.onDispose(on(root, 'click', '[data-action="website-edit-para"]', (_e, t) =>
+            this.websiteParagraphForm(Number(t.dataset.index))));
+        this.onDispose(on(root, 'click', '[data-action="website-del-para"]', (_e, t) =>
+            this.websiteCommit((e) => removeParagraph(e, Number(t.dataset.index)))));
+        this.onDispose(on(root, 'click', '[data-action="website-move-para"]', (_e, t) =>
+            this.websiteCommit((e) => moveParagraph(e, Number(t.dataset.index), Number(t.dataset.dir)))));
+
+        this.onDispose(on(root, 'click', '[data-action="website-facts"]', () => this.websiteFactsForm()));
+        this.onDispose(on(root, 'click', '[data-action="website-image"]', () => this.websitePickImage()));
+        this.onDispose(on(root, 'change', '[data-role="website-file"]', (_e, t) => {
+            const file = t.files?.[0] || null;
+            // Cleared so choosing the same file twice in a row still fires a
+            // change event — otherwise a failed upload cannot be retried
+            // without picking a different picture first.
+            t.value = '';
+            this.websiteUploadImage(file);
+        }));
+        this.onDispose(on(root, 'click', '[data-action="website-image-clear"]', () => this.websiteClearImage()));
+        this.onDispose(on(root, 'click', '[data-action="website-unpublish"]', () => this.websiteUnpublish()));
+    }
+
+    /* ----------------------------------------------------- WEBSITE CONTENT */
+
+    /**
+     * Two views in one tab: a list of every section, and one section opened
+     * for editing. `this.websiteKey` is which — null for the list.
+     *
+     * The editor is driven entirely by websiteContent.config.js. Nothing below
+     * names About, Courses or Branches: it renders whatever sections are
+     * declared, with whatever fields each declares, which is what lets Gallery
+     * and the rest arrive later as configuration rather than as code.
+     */
+    websitePanel() {
+        return this.websiteKey ? this.websiteEditor() : this.websiteList();
+    }
+
+    websiteList() {
+        const rows = this.data.website || [];
+        return html`
+            <section class="v3-card">
+                ${cardHead('Website Content',
+                    'What parents see in the app, and what the Natyam website will show. Edited here and nowhere else.')}
+                <div class="v3-card-body">
+                    <div class="v3-roll">
+                        ${rows.map((row) => html`
+                            <button class="v3-roll-row" data-action="website-open" data-key="${row.section.key}">
+                                <span class="v3-roll-main">
+                                    <span class="v3-roll-name">${row.section.label}</span>
+                                    <span class="v3-roll-meta">
+                                        ${row.published
+                                            ? `${this.websiteSummary(row.section, row.envelope)} · ${websiteStamp(row)}`
+                                            : 'Not published — parents see “coming soon”.'}
+                                    </span>
+                                </span>
+                                <span class="v3-roll-badges">
+                                    <span class="v3-chip" data-tone="${row.published ? 'ok' : 'muted'}">
+                                        ${row.published ? 'Published' : 'Empty'}
+                                    </span>
+                                </span>
+                            </button>
+                        `)}
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
+    /** A one-line description of what a section currently holds. */
+    websiteSummary(section, envelope) {
+        if (section.kind === CONTENT_KINDS.LIST) {
+            const n = (envelope.items || []).length;
+            return `${n} ${section.itemLabel.toLowerCase()}${n === 1 ? '' : 's'}`;
+        }
+        const paras = (envelope.blocks || []).filter((b) => b.type === BLOCK_TYPES.TEXT).length;
+        return `${paras} paragraph${paras === 1 ? '' : 's'}`;
+    }
+
+    websiteRow() {
+        return (this.data.website || []).find((r) => r.section.key === this.websiteKey) || null;
+    }
+
+    websiteEditor() {
+        const row = this.websiteRow();
+        if (!row) return html`<div class="v3-empty">That section no longer exists.</div>`;
+
+        const { section, envelope } = row;
+        const isList = section.kind === CONTENT_KINDS.LIST;
+
+        return html`
+            <section class="v3-card">
+                <div class="v3-card-head">
+                    <button class="v3-action-btn" data-action="website-back">← All sections</button>
+                </div>
+                ${cardHead(section.label, section.help, 'Edit heading', 'website-head')}
+                <div class="v3-card-body">
+                    <dl class="v3-facts">
+                        ${fact(section.titleLabel, envelope.title || '—')}
+                        ${fact(section.subtitleLabel, envelope.subtitle || '—')}
+                    </dl>
+                </div>
+            </section>
+
+            ${isList ? this.websiteItems(section, envelope) : this.websiteBlocks(section, envelope)}
+
+            <section class="v3-card">
+                <div class="v3-card-body v3-row-actions">
+                    <button class="v3-action-btn v3-btn-danger" data-action="website-unpublish">
+                        Remove this section
+                    </button>
+                </div>
+            </section>
+        `;
+    }
+
+    websiteItems(section, envelope) {
+        const items = envelope.items || [];
+        return html`
+            <section class="v3-card">
+                ${cardHead(`${section.itemLabel}s`, `Shown in this order.`,
+                    `Add ${section.itemLabel.toLowerCase()}`, 'website-add-item')}
+                <div class="v3-card-body">
+                    ${items.length ? html`
+                        <div class="v3-roll">
+                            ${items.map((item, i) => html`
+                                <div class="v3-roll-row">
+                                    <span class="v3-roll-main">
+                                        <span class="v3-roll-name">${item.title || '—'}</span>
+                                        <span class="v3-roll-meta">
+                                            ${[item.subtitle, ...(item.facts || []).map((f) => `${f.label}: ${f.value}`)]
+                                                .filter(Boolean).join(' · ') || '—'}
+                                        </span>
+                                    </span>
+                                    <span class="v3-roll-badges">
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-move"
+                                                data-index="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-move"
+                                                data-index="${i}" data-dir="1" ${i === items.length - 1 ? 'disabled' : ''}>↓</button>
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-edit-item"
+                                                data-index="${i}">Edit</button>
+                                        <button class="v3-action-btn v3-btn-sm v3-btn-danger" data-action="website-del-item"
+                                                data-index="${i}">Remove</button>
+                                    </span>
+                                </div>
+                            `)}
+                        </div>
+                    ` : html`<div class="v3-empty">Nothing added yet.</div>`}
+                </div>
+            </section>
+        `;
+    }
+
+    websiteBlocks(section, envelope) {
+        const blocks = envelope.blocks || [];
+        const paragraphs = blocks.filter((b) => b.type === BLOCK_TYPES.TEXT);
+        const factsBlock = blocks.find((b) => b.type === BLOCK_TYPES.FACTS);
+        const imageBlock = blocks.find((b) => b.type === BLOCK_TYPES.IMAGE);
+
+        return html`
+            ${section.allowImage ? html`
+                <section class="v3-card">
+                    ${cardHead(section.imageLabel || 'Picture',
+                        'JPEG, PNG or WebP, up to 5 MB. Shown on the public page.',
+                        imageBlock ? 'Replace' : 'Upload', 'website-image')}
+                    <div class="v3-card-body">
+                        ${imageBlock ? html`
+                            <img src="${imageBlock.src}" alt="${imageBlock.alt || ''}"
+                                 style="max-width:220px;border-radius:10px;display:block;margin-bottom:10px;">
+                            <button class="v3-action-btn v3-btn-sm v3-btn-danger" data-action="website-image-clear">
+                                Remove picture
+                            </button>
+                        ` : html`<div class="v3-empty">No picture yet.</div>`}
+                        <input type="file" accept="image/jpeg,image/png,image/webp"
+                               data-role="website-file" hidden>
+                    </div>
+                </section>
+            ` : ''}
+
+            <section class="v3-card">
+                ${cardHead('Paragraphs', 'Shown in this order.', 'Add paragraph', 'website-add-para')}
+                <div class="v3-card-body">
+                    ${paragraphs.length ? html`
+                        <div class="v3-roll">
+                            ${paragraphs.map((b, i) => html`
+                                <div class="v3-roll-row">
+                                    <span class="v3-roll-main">
+                                        <span class="v3-roll-meta" style="white-space:normal;">${b.text}</span>
+                                    </span>
+                                    <span class="v3-roll-badges">
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-move-para"
+                                                data-index="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-move-para"
+                                                data-index="${i}" data-dir="1" ${i === paragraphs.length - 1 ? 'disabled' : ''}>↓</button>
+                                        <button class="v3-action-btn v3-btn-sm" data-action="website-edit-para"
+                                                data-index="${i}">Edit</button>
+                                        <button class="v3-action-btn v3-btn-sm v3-btn-danger" data-action="website-del-para"
+                                                data-index="${i}">Remove</button>
+                                    </span>
+                                </div>
+                            `)}
+                        </div>
+                    ` : html`<div class="v3-empty">No paragraphs yet.</div>`}
+                </div>
+            </section>
+
+            <section class="v3-card">
+                ${cardHead(section.factsLabel || 'Key facts', section.factHint || '', 'Edit facts', 'website-facts')}
+                <div class="v3-card-body">
+                    ${factsBlock?.facts?.length
+                        ? html`<dl class="v3-facts">${factsBlock.facts.map((f) => fact(f.label, f.value))}</dl>`
+                        : html`<div class="v3-empty">None.</div>`}
+                </div>
+            </section>
+        `;
+    }
+
+    /* ------------------------------------------- WEBSITE CONTENT — ACTIONS */
+
+    /**
+     * Every mutation goes through here: change the envelope in memory, persist
+     * the whole section, repaint. Saving on each action rather than behind a
+     * "Save" button is the same contract the rest of Settings already has —
+     * editing a branch saves a branch — and it means there is never an unsaved
+     * state to lose by navigating away.
+     */
+    async websiteCommit(mutate) {
+        const row = this.websiteRow();
+        if (!row) return;
+
+        const next = JSON.parse(JSON.stringify(row.envelope));
+        mutate(next);
+
+        try {
+            const saved = await saveSection(row.section.key, next);
+            row.envelope = saved;
+            row.published = true;
+            // Mirror the stamp the repository just wrote, so the section list
+            // reads "updated … by …" immediately rather than only after a
+            // reload. Updating `updatedAt` alone left the by-line blank on
+            // every section saved in this session — the values were correct in
+            // Firestore, just not in the copy on screen.
+            row.updatedAt = new Date().toISOString();
+            row.updatedBy = session.actorId();
+            row.updatedByName = session.actorName();
+            this.paint();
+            toast.success('Saved', `${row.section.label} updated.`);
+        } catch (err) {
+            toast.error(err.message);
+        }
+    }
+
+    async websiteEditHead() {
+        const row = this.websiteRow();
+        const { section, envelope } = row;
+
+        // formModal() resolves with whatever onSubmit returns, and prefills
+        // from a top-level `values` map rather than a per-field `value` — see
+        // js/ui/form.js. Returning the values unchanged collects them here and
+        // lets websiteCommit() do the persisting, so one code path saves every
+        // kind of edit in this module.
+        const values = await formModal({
+            title: `${section.label} — heading`,
+            fields: [
+                { name: 'title', label: section.titleLabel, placeholder: section.titlePlaceholder },
+                { name: 'subtitle', label: section.subtitleLabel, type: 'textarea',
+                  placeholder: section.subtitlePlaceholder }
+            ],
+            values: { title: envelope.title, subtitle: envelope.subtitle },
+            onSubmit: (v) => v
+        });
+        if (!values) return;
+
+        await this.websiteCommit((e) => { e.title = values.title; e.subtitle = values.subtitle; });
+    }
+
+    async websiteItemForm(index = null) {
+        const row = this.websiteRow();
+        const { section, envelope } = row;
+        const existing = index === null ? null : (envelope.items || [])[index];
+
+        const values = await formModal({
+            title: existing ? `Edit ${section.itemLabel.toLowerCase()}` : `Add ${section.itemLabel.toLowerCase()}`,
+            fields: section.fields.map((f) => ({
+                name: fieldName(f),
+                label: f.label,
+                type: f.type || 'text',
+                required: Boolean(f.required),
+                placeholder: f.placeholder || ''
+            })),
+            values: Object.fromEntries(
+                section.fields.map((f) => [fieldName(f), existing ? readField(existing, f) : ''])),
+            onSubmit: (v) => v
+        });
+        if (!values) return;
+
+        const check = validateItem(section, values);
+        if (!check.ok) { toast.error(Object.values(check.errors)[0]); return; }
+
+        const item = buildItem(section, values, existing);
+        await this.websiteCommit((e) => {
+            e.items = e.items || [];
+            if (existing) e.items[index] = item;
+            else e.items.push(item);
+        });
+    }
+
+    async websiteParagraphForm(index = null) {
+        const row = this.websiteRow();
+        const { section, envelope } = row;
+        const paras = (envelope.blocks || []).filter((b) => b.type === BLOCK_TYPES.TEXT);
+        const existing = index === null ? null : paras[index];
+
+        const values = await formModal({
+            title: existing ? `Edit ${section.paragraphLabel.toLowerCase()}` : `Add ${section.paragraphLabel.toLowerCase()}`,
+            fields: [{ name: 'text', label: section.paragraphLabel, type: 'textarea', required: true }],
+            values: { text: existing?.text || '' },
+            onSubmit: (v) => v
+        });
+        if (!values?.text?.trim()) return;
+
+        await this.websiteCommit((e) => {
+            e.blocks = e.blocks || [];
+            if (existing) {
+                // Paragraphs are indexed among themselves, not among all
+                // blocks — the image and facts blocks sit in the same array.
+                let seen = -1;
+                e.blocks = e.blocks.map((b) => {
+                    if (b.type !== BLOCK_TYPES.TEXT) return b;
+                    seen += 1;
+                    return seen === index ? { ...b, text: values.text } : b;
+                });
+            } else {
+                e.blocks.push({ type: BLOCK_TYPES.TEXT, text: values.text });
+            }
+        });
+    }
+
+    async websiteFactsForm() {
+        const row = this.websiteRow();
+        const existing = (row.envelope.blocks || []).find((b) => b.type === BLOCK_TYPES.FACTS);
+        const rows = existing?.facts || [];
+
+        // Four pairs is enough for the "Founded / Students / Branches" style
+        // row these sections use, and a fixed set of inputs keeps this inside
+        // the existing form modal rather than needing a repeater widget.
+        const fields = [];
+        const prefill = {};
+        for (let i = 0; i < 4; i += 1) {
+            fields.push({ name: `l${i}`, label: `Label ${i + 1}` });
+            fields.push({ name: `v${i}`, label: `Value ${i + 1}` });
+            prefill[`l${i}`] = rows[i]?.label || '';
+            prefill[`v${i}`] = rows[i]?.value || '';
+        }
+
+        const values = await formModal({
+            title: 'Key facts', fields, values: prefill, onSubmit: (v) => v
+        });
+        if (!values) return;
+
+        const facts = [];
+        for (let i = 0; i < 4; i += 1) {
+            const label = (values[`l${i}`] || '').trim();
+            const value = (values[`v${i}`] || '').trim();
+            if (label && value) facts.push({ label, value });
+        }
+
+        await this.websiteCommit((e) => {
+            e.blocks = (e.blocks || []).filter((b) => b.type !== BLOCK_TYPES.FACTS);
+            if (facts.length) e.blocks.push({ type: BLOCK_TYPES.FACTS, facts });
+        });
+    }
+
+    /** Opens the hidden file input; the change handler does the upload. */
+    websitePickImage() {
+        this.container.querySelector('[data-role="website-file"]')?.click();
+    }
+
+    async websiteUploadImage(file) {
+        if (!file) return;
+
+        const problem = validateFile(UPLOAD_SCOPES.WEBSITE_CONTENT, file);
+        if (problem) { toast.error(problem); return; }
+
+        const row = this.websiteRow();
+        const previous = (row.envelope.blocks || []).find((b) => b.type === BLOCK_TYPES.IMAGE);
+
+        toast.info('Uploading…', 'This can take a moment on a slow connection.');
+
+        try {
+            const { url, path } = await upload(UPLOAD_SCOPES.WEBSITE_CONTENT, {
+                ownerId: row.section.key,
+                file,
+                replaces: previous?.imagePath || null
+            });
+
+            await this.websiteCommit((e) => {
+                e.blocks = (e.blocks || []).filter((b) => b.type !== BLOCK_TYPES.IMAGE);
+                // First, so the picture leads the page.
+                e.blocks.unshift({
+                    type: BLOCK_TYPES.IMAGE, src: url, imagePath: path,
+                    alt: e.title || row.section.label, caption: ''
+                });
+            });
+        } catch (err) {
+            toast.error(err.message);
+        }
+    }
+
+    async websiteClearImage() {
+        const row = this.websiteRow();
+        const existing = (row.envelope.blocks || []).find((b) => b.type === BLOCK_TYPES.IMAGE);
+        if (!existing) return;
+
+        const ok = await confirmModal({
+            title: 'Remove this picture?',
+            message: 'It will disappear from the public page immediately.',
+            confirmLabel: 'Remove', tone: 'danger'
+        });
+        if (!ok) return;
+
+        // The document first: a stored file nothing points at is invisible
+        // clutter, whereas a live page pointing at a deleted file is a broken
+        // image a parent sees.
+        await this.websiteCommit((e) => {
+            e.blocks = (e.blocks || []).filter((b) => b.type !== BLOCK_TYPES.IMAGE);
+        });
+
+        if (existing.imagePath) {
+            await removeUpload(existing.imagePath)
+                .catch((err) => console.error('Could not delete the removed picture', err));
+        }
+    }
+
+    async websiteUnpublish() {
+        const row = this.websiteRow();
+        const ok = await confirmModal({
+            title: `Remove ${row.section.label}?`,
+            message: 'Everything in this section is deleted, and parents will see “coming soon” for it. '
+                + 'Any pictures it holds are deleted too.',
+            confirmLabel: 'Remove section', tone: 'danger'
+        });
+        if (!ok) return;
+
+        try {
+            await unpublishSection(row.section.key);
+            row.envelope = row.section.kind === CONTENT_KINDS.LIST
+                ? { kind: CONTENT_KINDS.LIST, title: '', subtitle: '', items: [] }
+                : { kind: CONTENT_KINDS.PAGE, title: '', subtitle: '', blocks: [] };
+            row.published = false;
+            row.updatedAt = null;
+            this.websiteKey = null;
+            this.paint();
+            toast.success('Removed', `${row.section.label} is no longer published.`);
+        } catch (err) {
+            toast.error(err.message);
+        }
     }
 
     /* --------------------------------------------------------------- FORMS */
@@ -1306,4 +1797,59 @@ function fact(label, value) {
 
 function titleCase(value) {
     return String(value || '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/* ------------------------------------------- WEBSITE CONTENT — ORDERING ---
+   Reordering is a swap with the neighbour rather than a drag: it works with
+   a keyboard, on a touchscreen and with a screen reader, and this is a list
+   of five branches rather than a hundred.
+   -------------------------------------------------------------------------- */
+
+/**
+ * "updated 5 August 2026 by Sai" — the system-managed audit stamp.
+ *
+ * Administration only. This is never returned to the mobile app or the
+ * website: it lives at document level, outside the `value` envelope those
+ * read, so it cannot leak onto a public page even by accident.
+ *
+ * Older documents written before this metadata existed carry no `updatedBy`,
+ * so the "by …" half is dropped rather than rendered as "by null".
+ */
+function websiteStamp(row) {
+    if (!row.updatedAt) return 'never updated';
+    const when = formatDateLong(row.updatedAt.slice(0, 10));
+    const who = row.updatedByName || row.updatedBy;
+    return who ? `updated ${when} by ${who}` : `updated ${when}`;
+}
+
+/** Swaps an entry with its neighbour, in place. Out-of-range moves no-op. */
+function moveWithin(list, index, direction) {
+    const target = index + direction;
+    if (!Array.isArray(list) || target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+}
+
+/**
+ * Paragraph indices are counted among paragraphs only, because the blocks
+ * array also holds the image and facts blocks. These two translate a
+ * paragraph index into a position in that mixed array.
+ */
+function paragraphPositions(envelope) {
+    return (envelope.blocks || [])
+        .map((b, i) => (b.type === BLOCK_TYPES.TEXT ? i : -1))
+        .filter((i) => i >= 0);
+}
+
+function removeParagraph(envelope, index) {
+    const at = paragraphPositions(envelope)[index];
+    if (at === undefined) return;
+    envelope.blocks.splice(at, 1);
+}
+
+function moveParagraph(envelope, index, direction) {
+    const positions = paragraphPositions(envelope);
+    const from = positions[index];
+    const to = positions[index + direction];
+    if (from === undefined || to === undefined) return;
+    [envelope.blocks[from], envelope.blocks[to]] = [envelope.blocks[to], envelope.blocks[from]];
 }

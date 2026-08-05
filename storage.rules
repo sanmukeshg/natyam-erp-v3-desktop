@@ -1,0 +1,96 @@
+// NATYAM ERP — Cloud Storage Security Rules
+//
+// The companion to firestore.rules, and a SEPARATE deployment: paste this into
+// Firebase Console → Storage → Rules (or `firebase deploy --only storage`).
+// Publishing firestore.rules does not publish this file, and vice versa.
+//
+// The default bucket starts life denying everything (production mode). This
+// file opens exactly one path, for exactly one purpose.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// HOW THIS MIRRORS firestore.rules
+//
+// Storage rules cannot read Firestore cheaply the way firestore.rules can
+// get() a /users document — every get() here is billed as a Firestore read on
+// every single object request, including every image view on a public page.
+// So this file does NOT re-derive the role model. Instead:
+//
+//   Public paths      gated on the path alone (read: if true)
+//   Privileged paths  gated on being signed in, plus a firestore.get() only
+//                     where the write side genuinely needs it
+//
+// Uploads are already gated a second time by the fact that the RECORD holding
+// the resulting URL lives in Firestore behind canManageSettings(). Someone who
+// could upload an orphan image but not attach it to anything has achieved
+// nothing a Storage rule needs to prevent.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// PATHS ARE THE CONTRACT. js/services/upload.service.js's SCOPES table builds
+// every path in this app, and each scope's `prefix` is what the matches below
+// key on. A scope added there without a block here fails every upload with
+// "storage/unauthorized"; a block here with no scope is dead configuration.
+// Add them together.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Matches upload.service.js's IMAGE_TYPES exactly. SVG is excluded there
+    // and here for the same reason: an SVG can carry script, and these files
+    // are served from the project's own storage domain onto a public page.
+    function isDisplayImage() {
+      return request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    // 5 MB, matching the scope's maxBytes. The client checks this too, so a
+    // person gets a sentence rather than a permissions error — but the client
+    // check is a courtesy and this one is the limit.
+    function withinSizeLimit() {
+      return request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    /* ====================================================================
+       WEBSITE CONTENT — the only scope that exists today.
+
+       Images for the public sections: the Founder's portrait now, and
+       Gallery, Events and Testimonials later. They appear on pages served to
+       people with no account at all, which is why read is open — and it has
+       to be: a Firebase download URL is fetched by the browser directly, with
+       no session attached to it.
+
+       Nothing here is ever private. If a picture should not be on a public
+       web page, it does not belong in this path.
+
+       Writes require only a signed-in caller rather than a Firestore-backed
+       capability check, deliberately: a get() here would bill a Firestore read
+       against every upload, and the real gate is downstream — the /siteContent
+       document that would carry this URL is itself behind canManageSettings()
+       in firestore.rules. The worst an ordinary signed-in staff member can do
+       is leave an unreferenced image in the bucket.
+       ==================================================================== */
+    match /websiteContent/{sectionKey}/{fileName} {
+      allow read: if true;
+
+      allow create, update: if signedIn()
+        && isDisplayImage()
+        && withinSizeLimit();
+
+      // Replacing an image deletes the one it supersedes
+      // (upload.service.js's `replaces`), so delete has to be available to
+      // the same callers that can write.
+      allow delete: if signedIn();
+    }
+
+    // Everything else is denied. Student photos, certificates, documents and
+    // profile photos each get their own block here when the module that needs
+    // them arrives — not before.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

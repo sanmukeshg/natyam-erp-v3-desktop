@@ -46,6 +46,11 @@ import { formModal } from '../../ui/form.js';
 /** Filter pills. `null` means every status. */
 const FILTERS = [
     { key: null, label: 'All' },
+    // Parent Portal Stage 4. Not a status — a SOURCE — so it is handled
+    // separately in visibleRows() rather than passed to listApplications()'s
+    // status filter. It sits second because a self-service application is the
+    // one kind nobody is standing at the desk to chase.
+    { key: 'source:parent', label: 'From parents' },
     { key: ADMISSION_STATUS.SUBMITTED, label: 'Submitted' },
     { key: ADMISSION_STATUS.REVIEWING, label: 'Reviewing' },
     { key: ADMISSION_STATUS.APPROVED, label: 'Approved' },
@@ -109,13 +114,26 @@ export default class AdmissionsPage extends Page {
     async load() {
         try {
             const branchId = session.branch();
-            const [stats, rows] = await Promise.all([
+            // Branches are fetched for the review sheet's branch picker — a
+            // parent-submitted application arrives with a branch NAME and no
+            // id, and Reception maps it here. Loaded with the list rather
+            // than on opening a sheet so the picker is never empty on first
+            // paint. `listBranches` is already imported for the intake form.
+            const [stats, rows, branches] = await Promise.all([
                 pipeline(branchId),
-                listApplications(branchId, { status: this.filter })
+                // "From parents" is a source, not a status — passing it to the
+                // service's status filter would match nothing and silently
+                // empty the list. It is applied in visibleRows() instead, so
+                // the query here asks for everything.
+                listApplications(branchId, {
+                    status: this.filter === 'source:parent' ? null : this.filter
+                }),
+                listBranches().catch(() => [])
             ]);
             if (this.disposed) return;
             this.stats = stats;
             this.rows = rows;
+            this.branches = branches;
             this.paint();
         } catch (err) {
             if (this.disposed) return;
@@ -127,10 +145,19 @@ export default class AdmissionsPage extends Page {
     }
 
     visibleRows() {
+        // "From parents" is a source filter, not a status one, so it is
+        // applied here rather than in the service query — listApplications()
+        // takes a status and would have to grow a second concept to express
+        // it. `preferredBranch` joins the search fields for the same reason
+        // it exists: it may be the only branch a parent application carries.
+        const bySource = this.filter === 'source:parent'
+            ? this.rows.filter((row) => row.source === 'parent_portal')
+            : this.rows;
+
         const term = this.search.trim().toLowerCase();
-        if (!term) return this.rows;
-        return this.rows.filter((row) =>
-            [row.name, row.guardianName, row.guardianPhone, row.applicationNo]
+        if (!term) return bySource;
+        return bySource.filter((row) =>
+            [row.name, row.guardianName, row.guardianPhone, row.applicationNo, row.preferredBranch]
                 .some((value) => String(value || '').toLowerCase().includes(term)));
     }
 
@@ -175,6 +202,11 @@ export default class AdmissionsPage extends Page {
                             </span>
                         </span>
                         <span class="v3-roll-badges">
+                            ${row.source === 'parent_portal' ? html`
+                                <span class="v3-chip" title="Submitted by the family through the Natyam app">
+                                    From parent
+                                </span>
+                            ` : ''}
                             <span class="v3-chip" data-admission="${row.status}">${row.statusLabel}</span>
                         </span>
                     </button>
@@ -232,6 +264,39 @@ export default class AdmissionsPage extends Page {
                             <div class="v3-notice" data-tone="caution">
                                 ${possibleDuplicates.length} similar application${possibleDuplicates.length === 1 ? '' : 's'}
                                 already exist${possibleDuplicates.length === 1 ? 's' : ''} — check before enrolling.
+                            </div>
+                        ` : ''}
+
+                        ${this.detail.fromParent ? html`
+                            <div class="v3-notice" data-tone="info">
+                                Submitted by the family through the Natyam app.
+                                ${this.detail.application.applicationNo
+                                    ? ''
+                                    : 'A NAT/APP number is issued when you begin review.'}
+                            </div>
+                        ` : ''}
+
+                        ${this.detail.needsBranch ? html`
+                            <div class="v3-field">
+                                <label class="v3-field-label" for="map-branch">
+                                    Branch${this.detail.preferredBranch
+                                        ? ` — the family asked for “${this.detail.preferredBranch}”`
+                                        : ''}
+                                </label>
+                                <select class="v3-input" id="map-branch" data-role="map-branch">
+                                    <option value="">Decide later</option>
+                                    ${(this.branches || []).map((b) => html`
+                                        <option value="${b.id}"
+                                                ${this.detail.suggestedBranch?.id === b.id ? 'selected' : ''}>
+                                            ${b.name}
+                                        </option>
+                                    `)}
+                                </select>
+                                <p class="v3-field-help">
+                                    The family chose a branch by name from the public site; it is a
+                                    preference, not an ERP record. Map it when you begin review, or
+                                    leave it — enrolling requires a batch, which sets the branch anyway.
+                                </p>
                             </div>
                         ` : ''}
 
@@ -307,8 +372,15 @@ export default class AdmissionsPage extends Page {
         this.busy = true;
         this.paintDetail();
         try {
-            if (key === 'review') await beginReview(app.id);
-            else if (key === 'approve') await approve(app.id);
+            // Beginning review is where a parent-submitted application gets
+            // its NAT/APP number and, if Reception chose one, its ERP branch.
+            // The picker in the detail sheet defaults to suggestBranchFor()'s
+            // match but is never required — see beginReview()'s own comment
+            // on why an unmapped branch must not block the review.
+            if (key === 'review') {
+                const picked = this.container.querySelector('[data-role="map-branch"]')?.value || null;
+                await beginReview(app.id, { branchId: picked });
+            } else if (key === 'approve') await approve(app.id);
             else if (key === 'reopen') await reopen(app.id);
             else throw new Error(`"${key}" is not something this screen can do yet.`);
 

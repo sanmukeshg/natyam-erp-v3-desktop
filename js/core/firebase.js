@@ -13,12 +13,24 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import { getStorage } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import { firebaseConfig } from '../config/firebase.config.js';
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const firestore = getFirestore(app);
+
+/**
+ * Cloud Storage. The bucket comes from firebaseConfig.storageBucket
+ * (natyam-erp.firebasestorage.app) — never named anywhere else in the app.
+ *
+ * Only js/data/storage.repository.js imports this, the same way only the
+ * Firestore repositories import `firestore`. A page that wants to upload
+ * something calls js/services/upload.service.js and never learns that
+ * Firebase is underneath.
+ */
+export const storage = getStorage(app);
 
 /**
  * Subscribes to sign-in/sign-out. A thin wrapper so app.js — the only

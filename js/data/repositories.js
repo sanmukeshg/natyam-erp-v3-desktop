@@ -61,3 +61,10 @@ export {
 /* ---- Platform ---- */
 export { settings$ } from './settings.repository.firestore.js';
 export { notifications$ } from './notifications.repository.firestore.js';
+
+/* ---- Website Content ----
+   The public-facing sections, written here and nowhere else in the product:
+   natyam-mobile carries a read-only copy of this repository, and the future
+   Natyam website will read the same documents. Everything in this collection
+   is world-readable by design. */
+export { siteContent$ } from './siteContent.repository.firestore.js';
