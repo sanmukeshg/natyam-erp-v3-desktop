@@ -32,7 +32,7 @@ import { localDate, formatDateLong } from '../../utils/date.js';
 import { CAPABILITIES, programTypes, curriculum, levelLabel } from '../../config/app.config.js';
 import {
     PROGRAM_STATUS, listPrograms, programSummary, programDetail,
-    schedule, updateProgram, complete, cancel, setParticipants, eligibleStudents
+    schedule, updateProgram, complete, cancel, setParticipants, eligibleStudents, branchesOf
 } from '../../services/programs.service.js';
 import { listBranches } from '../../services/settings.service.js';
 import { listStaff } from '../../services/staff.service.js';
@@ -257,7 +257,16 @@ export default class ProgramsPage extends Page {
 
                         <div class="v3-facts">
                             ${fact('Venue', p.venue || '—')}
-                            ${fact('Branch', d.branch?.name || '—')}
+                            <!--
+                              ENH-308 — every branch, listed in full. The list
+                              row abbreviates to "Kondapur + 2 more" because it
+                              has no room; the detail is where someone comes to
+                              find out which ones, so it names them all.
+                            -->
+                            ${fact(d.branches?.length > 1 ? 'Branches' : 'Branch',
+                                d.branches?.length
+                                    ? d.branches.map((b) => b.name).join(', ')
+                                    : (d.branch?.name || '—'))}
                             ${fact('Led by', d.lead?.name || 'Not assigned')}
                             ${fact('Taking part', formatNumber(d.participants.length))}
                             ${p.status === PROGRAM_STATUS.COMPLETED ? fact('Income', formatMoney(p.income || 0)) : ''}
@@ -323,10 +332,23 @@ export default class ProgramsPage extends Page {
               options: programTypes().map((t) => ({ value: t.value, label: t.label })),
               value: existing?.type },
             { name: 'date', label: 'Date', type: 'date', required: true, value: existing?.date },
-            { name: 'branchId', label: 'Branch', type: 'select', required: true,
-              placeholder: branches.length > 1 ? 'Choose a branch' : null,
+            // ENH-308 — a programme can run at one branch, several, or all of
+            // them. Ticking every branch IS "all branches": it stores those ids
+            // explicitly rather than a flag, so a branch opened next year does
+            // not retroactively join a programme scheduled today.
+            //
+            // Same control and same wording as the mobile form, so a programme
+            // scheduled at a desk and one scheduled on a phone are the same
+            // record made the same way.
+            { name: 'branchIds', label: 'Branches', type: 'checks', required: true,
+              itemNoun: 'branch',
               options: branches.map((b) => ({ value: b.id, label: b.name })),
-              value: defaultBranchId },
+              help: branches.length > 1
+                  ? 'Tick every branch taking part. The cast can then be drawn from all of them.'
+                  : null,
+              value: existing?.branchIds?.length
+                  ? existing.branchIds
+                  : (defaultBranchId ? [defaultBranchId] : []) },
             // Required by assertShape() for examinations only — hence showIf,
             // which also keeps the validator off it for every other type.
             { name: 'level', label: 'Level examined', type: 'select', placeholder: 'Choose a level',
@@ -423,10 +445,18 @@ export default class ProgramsPage extends Page {
          * filter change — the same rule the search filter follows — and the
          * dialog says how many are selected across the whole programme.
          */
-        const [branches, batches] = await Promise.all([
+        const [allBranches, batches] = await Promise.all([
             listBranches().catch(() => []),
             listBatches(null, { includeClosed: false }).catch(() => [])
         ]);
+
+        // ENH-308 — the branch filter offers only the branches this programme
+        // actually runs at. Offering all of them would let someone filter to a
+        // branch whose students are not eligible for this cast, and get an
+        // empty list with no explanation. branchesOf() also covers programmes
+        // written before branchIds existed.
+        const running = new Set(branchesOf(p));
+        const branches = allBranches.filter((b) => running.has(b.id));
 
         const inBranch = (s, branchId) => !branchId || s.branchId === branchId;
         const inBatch = (s, batchId) => !batchId || s.batchId === batchId;
