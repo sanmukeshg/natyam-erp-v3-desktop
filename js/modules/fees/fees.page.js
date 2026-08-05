@@ -35,7 +35,8 @@ import { formatMoney, formatMoneyShort } from '../../utils/money.js';
 import { formatDate, formatDateLong, localDate, startOfMonth } from '../../utils/date.js';
 import { PAYMENT_MODES } from '../../config/app.config.js';
 import { listStudents } from '../../services/students.service.js';
-import { collectionSummary, studentFeeSummary, recordPayment } from '../../services/fees.service.js';
+import { collectionSummary, studentFeeSummary, recordPayment, waiveInvoice } from '../../services/fees.service.js';
+import { formModal } from '../../ui/form.js';
 
 const FILTERS = [
     { key: null, label: 'Everyone' },
@@ -95,6 +96,45 @@ export default class FeesPage extends Page {
 
         [EVENTS.PAYMENT_RECORDED, EVENTS.PAYMENT_REFUNDED, EVENTS.INVOICE_CREATED, EVENTS.BRANCH_CHANGED]
             .forEach((event) => this.events.on(event, () => this.load()));
+    }
+
+    /**
+     * ENH-309 — writing off an invoice.
+     *
+     * A waiver forgives money already owed, which is why the reason is
+     * mandatory in waiveInvoice() itself rather than only in this form: it is
+     * the answer to a question somebody will ask months later, and it belongs
+     * on the record whichever screen the waiver came from.
+     *
+     * The whole outstanding balance goes. There is no partial waiver by
+     * decision — a part-forgiven invoice that stays open is a harder thing to
+     * explain on a statement than two clean states.
+     *
+     * No separate confirm step: the dialog names the invoice and the amount in
+     * its own title and intro, the submit button says "Waive", and the action
+     * is reversible in the sense that matters — the invoice stays on record
+     * with the reason attached rather than disappearing.
+     */
+    async waive(invoiceId) {
+        const invoice = (this.detail?.fees?.invoices || []).find((i) => i.id === invoiceId);
+        if (!invoice) return;
+
+        const done = await formModal({
+            title: `Waive ${invoice.number}?`,
+            description: `${formatMoney(invoice.balance)} is outstanding. Waiving writes that balance `
+                + 'off — the invoice stays on record with the reason attached.',
+            submitLabel: 'Waive invoice',
+            fields: [
+                { name: 'reason', label: 'Reason', type: 'textarea', rows: 3, required: true,
+                  help: 'Scholarship, hardship, goodwill — whatever it is, someone will ask later.' }
+            ],
+            values: { reason: '' },
+            onSubmit: (v) => waiveInvoice(invoice.id, { reason: v.reason })
+        });
+
+        if (!done) return;
+        toast.success('Invoice waived', invoice.number);
+        await this.load();
     }
 
     async load() {
@@ -308,6 +348,18 @@ export default class FeesPage extends Page {
                                 ${paying ? 'Cancel' : 'Collect'}
                             </button>
                         ` : ''}
+                        <!--
+                          ENH-309. Gated on fee.waive, NOT fee.collect — those
+                          are different capabilities and only Administrator and
+                          Owner hold the former. The v2 screen gated this on
+                          fee.collect, which showed Reception a button that
+                          waiveInvoice() then refused.
+                        -->
+                        ${session.can('fee.waive') && invoice.balance > 0 ? html`
+                            <button class="v3-action-btn v3-btn-sm" data-action="waive" data-id="${invoice.id}">
+                                Waive
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -445,6 +497,8 @@ export default class FeesPage extends Page {
             if (event.target !== target) return;
             this.close();
         }));
+
+        this.onDispose(on(root, 'click', '[data-action="waive"]', (_e, t) => this.waive(t.dataset.id)));
 
         this.onDispose(on(root, 'click', '[data-action="collect"]', (_e, t) => {
             this.payingInvoiceId = this.payingInvoiceId === t.dataset.id ? null : t.dataset.id;
