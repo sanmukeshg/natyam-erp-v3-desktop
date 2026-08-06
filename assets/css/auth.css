@@ -207,13 +207,77 @@
 }
 .auth-back-link:hover { color: #fff; }
 
-/* Reuse the app's real .btn/.btn-google/.btn-primary/.btn-secondary/.btn-block/
-   .btn-link classes for semantics; only restyle them here, scoped, never bare. */
-.glass-card .btn-google { margin-bottom: var(--space-3); }
+/*
+ * The comment this replaced said "reuse the app's real .btn/.switch classes
+ * for semantics; only restyle them here" — true of natyam-admin's other
+ * screens, wrong for this one. index.html loads tokens.css/base.css/auth.css
+ * /v3.css and deliberately not components.css ("no migrated screen needs
+ * v2's opaque-surface component styles yet"), so .btn and .switch never got
+ * a base rule here at all — only the colour modifiers below, applied to a
+ * plain default <button>. natyam-mobile hit the identical gap and fixed it
+ * under UAT ENH-611; this is that fix, ported rather than rediscovered.
+ * Base rules only — the colour modifiers beneath them are this app's own and
+ * unchanged.
+ */
+.glass-card .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: var(--space-2);
+    width: 100%; min-height: 50px; padding: 0 var(--space-4);
+    font-family: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold);
+    line-height: 1; white-space: nowrap; cursor: pointer;
+    /* Same radius as .field-fl .auth-input, so the sign-in button reads as
+       part of the same set of controls as the fields above it.
+       .btn-google overrides it to a pill below. */
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard),
+                box-shadow var(--duration-fast) var(--ease-standard);
+}
+.glass-card .btn:disabled { opacity: 0.55; cursor: default; }
+
+.glass-card .btn-google {
+    margin-bottom: var(--space-3);
+    /* A deliberately different shape from the sign-in button, which matches
+       the inputs instead. */
+    border-radius: var(--radius-full);
+    gap: var(--space-3);
+    background: #FFFFFF; color: #1F1F1F;
+    border-color: rgba(255, 255, 255, .5);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+}
+.glass-card .btn-google:hover:not(:disabled) { background: #F2F2F2; }
+.glass-card .btn-google > svg,
+.glass-card .btn-google > img { flex-shrink: 0; width: 18px; height: 18px; }
+
 .glass-card .btn-primary { background: var(--logo-gold); color: var(--brand-terracotta-800); font-weight: var(--weight-semibold); }
 .glass-card .btn-primary:hover:not(:disabled) { box-shadow: 0 8px 20px rgba(240, 196, 106, .35); }
 .glass-card .btn-secondary { background: rgba(255, 255, 255, .1); color: #fff; border-color: rgba(255, 255, 255, .22); }
 .glass-card .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, .16); }
+
+/* "Remember me" — the markup was always a switch (see login.page.js); this
+   is the switch. Same gap this file's missing .btn base left, ported from
+   the same ENH-611 fix. */
+.switch { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track {
+    position: relative; flex-shrink: 0;
+    width: 40px; height: 23px;
+    background: rgba(255, 255, 255, .22);
+    border-radius: var(--radius-full);
+    transition: background-color var(--duration-normal) var(--ease-standard);
+}
+.switch-track::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 17px; height: 17px;
+    background: #FFFFFF; border-radius: var(--radius-full);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    transition: transform var(--duration-normal) var(--ease-spring);
+}
+.switch input:checked + .switch-track::after { transform: translateX(17px); }
+.switch input:focus-visible + .switch-track {
+    box-shadow: 0 0 0 3px rgba(240, 196, 106, .45);
+}
+
 .glass-card form { display: flex; flex-direction: column; }
 .glass-card [data-role="otp-verify"] { display: flex; flex-direction: column; }
 .glass-card [data-role="banner"]:not(:empty) { margin-bottom: var(--space-4); }
