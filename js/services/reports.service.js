@@ -794,8 +794,8 @@ export async function printReport(result) {
   @page { size: A4; margin: 16mm 14mm; }
   * { box-sizing: border-box; }
   body { font: 11px/1.5 "Segoe UI", system-ui, sans-serif; color: #14141c; margin: 0; }
-  header { border-bottom: 2px solid #2f2a6b; padding-bottom: 10px; margin-bottom: 16px; }
-  .org { font-size: 16px; font-weight: 700; color: #2f2a6b; letter-spacing: -0.01em; }
+  header { border-bottom: 2px solid #813724; padding-bottom: 10px; margin-bottom: 16px; }
+  .org { font-size: 16px; font-weight: 700; color: #813724; letter-spacing: -0.01em; }
   .sub { color: #5c5c6e; font-size: 10px; margin-top: 2px; }
   h1 { font-size: 13px; margin: 14px 0 2px; }
   .meta { color: #5c5c6e; font-size: 10px; }
@@ -806,7 +806,7 @@ export async function printReport(result) {
   .r { text-align: right; font-variant-numeric: tabular-nums; }
   .b { font-weight: 600; }
   tbody tr:nth-child(even) { background: #fafafc; }
-  .totals { margin-top: 14px; padding-top: 10px; border-top: 2px solid #2f2a6b;
+  .totals { margin-top: 14px; padding-top: 10px; border-top: 2px solid #813724;
             display: flex; justify-content: space-between; font-weight: 700; font-size: 12px; }
   footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #ededf2;
            color: #8a8a9a; font-size: 9px; display: flex; justify-content: space-between; }

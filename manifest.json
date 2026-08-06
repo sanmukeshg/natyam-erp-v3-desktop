@@ -7,7 +7,7 @@
     "display": "standalone",
     "orientation": "any",
     "background_color": "#f7f6f3",
-    "theme_color": "#2f2a6b",
+    "theme_color": "#813724",
     "categories": ["education", "productivity", "business"],
     "icons": [
         { "src": "assets/icons/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
