@@ -48,7 +48,8 @@ import {
     settings$, students$, admissions$, attendance$, classSessions$, programs$,
     certificates$, batches$, staff$, feePlans$, invoices$, payments$, ledger$,
     expenses$, salaries$, documents$, drafts$, notifications$, branches$,
-    academicYears$, curricula$, curriculumLevels$, holidays$, audit$, users$
+    academicYears$, curricula$, curriculumLevels$, holidays$, audit$, users$,
+    enquiries$, parentProfiles$
 } from '../data/repositories.js';
 
 const FILE_KIND = 'natyam-erp-backup';
@@ -85,7 +86,9 @@ const COLLECTIONS = Object.freeze([
     { key: 'curriculumLevels', repo: curriculumLevels$, soft: true },
     { key: 'holidays',         repo: holidays$,        soft: true },
     { key: 'auditLog',         repo: audit$,           soft: false },
-    { key: 'settings',         repo: settings$,        soft: false }
+    { key: 'settings',         repo: settings$,        soft: false },
+    { key: 'enquiries',        repo: enquiries$,       soft: false },
+    { key: 'parentProfiles',   repo: parentProfiles$,  soft: false }
 ]);
 
 /** Accounts are handled apart from COLLECTIONS — see restore()'s `restoreUsers`. */
@@ -352,8 +355,11 @@ export async function exportStore(key, { pretty = true } = {}) {
  * the thing you do not want re-entered from memory.
  *
  * NOT kept, deliberately: `auditLog` is a record of what happened to the demo
- * data and means nothing afterwards. `users` and `siteContent` never reach
- * this loop at all — see COLLECTIONS.
+ * data and means nothing afterwards. `enquiries` and `parentProfiles` are
+ * records about people, exactly like students and admissions — a test
+ * enquiry or a test parent profile is demo data, not configuration, and
+ * belongs in the same wipe. `users` and `siteContent` never reach this loop
+ * at all — see COLLECTIONS.
  */
 export async function resetEverything({ safetyCopy = true, keepInstitute = true } = {}) {
     session.require(CAPABILITIES.DATA_RESTORE, 'erase all data');

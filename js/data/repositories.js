@@ -62,6 +62,16 @@ export {
 export { settings$ } from './settings.repository.firestore.js';
 export { notifications$ } from './notifications.repository.firestore.js';
 
+/* ---- Parent/Student Portal writes ----
+   natyam-mobile writes both of these — an enquiry from the public site, a
+   profile on every parent sign-in — and no v3 screen here reads either one
+   yet. Carried for the same reason as curriculumLevels$ above: the Data tab's
+   backup/export/erase tools have to see the whole database, and a backup or
+   an erase that silently skips a collection is worse than admitting it does
+   not have one. */
+export { enquiries$ } from './enquiries.repository.firestore.js';
+export { parentProfiles$ } from './parentProfiles.repository.firestore.js';
+
 /* ---- Website Content ----
    The public-facing sections, written here and nowhere else in the product:
    natyam-mobile carries a read-only copy of this repository, and the future
