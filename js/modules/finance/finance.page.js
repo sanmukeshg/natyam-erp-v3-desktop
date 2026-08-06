@@ -380,8 +380,15 @@ export default class FinancePage extends Page {
                                         · ${r.sourceType ? `auto (${r.sourceType})` : 'manual entry'}
                                     </span>
                                 </span>
-                                <span class="v3-chip" data-fee="${r.type === 'income' ? 'clear' : 'overdue'}">
-                                    ${r.type === 'income' ? '+' : '−'}${formatMoney(r.amount)}
+                                <!--
+                                    Sign comes from the AMOUNT, not the type. A
+                                    reversal is now a contra entry — the original
+                                    type with a negative amount — so keying the
+                                    sign off `type` would have printed "+₹-1,500"
+                                    for the very row that reduces income.
+                                -->
+                                <span class="v3-chip" data-fee="${r.amount < 0 ? 'overdue' : r.type === 'income' ? 'clear' : 'overdue'}">
+                                    ${r.amount < 0 ? '−' : r.type === 'income' ? '+' : '−'}${formatMoney(Math.abs(r.amount))}
                                 </span>
                                 <span class="v3-chip">${formatMoney(r.balance)}</span>
                                 ${session.can(CAPABILITIES.FINANCE_EDIT) && !r.reversed && !r.reversalOf ? html`
