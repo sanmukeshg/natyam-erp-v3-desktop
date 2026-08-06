@@ -154,7 +154,17 @@
     .auth-hero-desktop { opacity: 1; transform: translateX(0); pointer-events: auto; }
     .auth-screen[data-state="signin"] .auth-hero-desktop { opacity: 0; transform: translateX(-36px); pointer-events: none; }
 
-    .auth-signin { opacity: 0; transform: translateX(72px); pointer-events: none; align-items: center; justify-content: flex-start; }
+    /*
+     * `justify-content: flex-start` here was overriding the `center` the
+     * shared rule above already sets for both panels — the same specificity,
+     * later in the file, so it silently won. There is no `[data-state=
+     * "signin"] .auth-signin` rule that puts justify-content back, so the
+     * card sat pinned near the top of the column while .auth-art's medallion
+     * stayed centred beside it — "not inline," and a real bug, not a design
+     * choice: nothing else here explains why the sign-in panel alone should
+     * anchor to the top when its sibling and the hero state both centre.
+     */
+    .auth-signin { opacity: 0; transform: translateX(72px); pointer-events: none; align-items: center; }
     .auth-screen[data-state="signin"] .auth-signin { opacity: 1; transform: translateX(0); pointer-events: auto; }
 
     /* .auth-brand-block and .auth-signin-inner are flex items of an
@@ -167,6 +177,17 @@
        (capped by their own max-width) size correctly instead of collapsing. */
     .auth-brand-block { width: 100%; }
     .auth-signin-inner { width: 100%; }
+
+    /*
+     * The back link sits below the card, not above it — CSS order only,
+     * never a DOM change, because natyam-mobile renders this exact same
+     * markup and already has the back link above its card, matching the
+     * screenshot that was the reference for how good this should look.
+     * Reordering the markup itself would have moved it on mobile too.
+     */
+    .auth-signin-inner { display: flex; flex-direction: column; align-items: center; }
+    .auth-signin-inner .auth-back-link { order: 2; margin-top: var(--space-6); margin-bottom: 0; }
+    .auth-signin-inner .glass-card { order: 1; }
 }
 
 .auth-brand-block { margin-bottom: var(--space-8); text-align: center; }
