@@ -1721,9 +1721,12 @@ export default class SettingsPage extends Page {
                        + 'this Firebase project. A safety copy downloads first.',
             submitLabel: 'Erase everything',
             fields: [
-                { name: 'keepInstitute', label: 'Keep the school details and branches', type: 'switch',
-                  switchLabel: 'Yes, keep them',
-                  help: 'The usual reason to erase is clearing demo data before entering your own.' },
+                { name: 'keepInstitute', label: 'Keep your Settings configuration', type: 'switch',
+                  switchLabel: 'Yes, keep it',
+                  help: 'Keeps school details, branches, fee plans, curriculum, programme types, '
+                      + 'expense categories, roles and website content. Deletes only the records '
+                      + 'about people — students, admissions, attendance, invoices, payments and '
+                      + 'the rest. Your user accounts are never touched either way.' },
                 { name: 'confirm', label: 'Type ERASE to confirm', required: true,
                   placeholder: 'ERASE' }
             ],

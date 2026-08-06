@@ -333,9 +333,27 @@ export async function exportStore(key, { pretty = true } = {}) {
  * Empties every collection. The most destructive thing this application can
  * do, so it takes a safety copy first unless told not to.
  *
- * `keepInstitute` preserves the school's own details and branches, because the
- * usual reason to erase is "clear the demo data and start entering ours" — and
- * retyping the institute record is pure friction with no safety benefit.
+ * `keepInstitute` preserves CONFIGURATION — everything the Settings module
+ * owns. The usual reason to erase is "clear the demo data and start entering
+ * ours", and configuration is identical either way: a fee plan, a curriculum
+ * level or a branch is the same whether the database holds test students or
+ * real ones. Only the records ABOUT people are demo data.
+ *
+ * The rule is simply "if Settings edits it, this keeps it", and it is worth
+ * stating because the list looks shorter than the Settings module does. Most
+ * of those tabs write into `settings` itself rather than a collection of their
+ * own: Curriculum is `curriculum.override`, and Roles, Programme types and
+ * Expense categories are the same pattern (see settings.service.js's
+ * STRUCTURAL_OVERRIDE_KEYS). So keeping `settings` already keeps four tabs.
+ *
+ * `feePlans` is the one that has its own collection, and it was missing here —
+ * an erase would have taken every fee plan with it and left someone retyping
+ * the price list before they could invoice anybody. Fee amounts are exactly
+ * the thing you do not want re-entered from memory.
+ *
+ * NOT kept, deliberately: `auditLog` is a record of what happened to the demo
+ * data and means nothing afterwards. `users` and `siteContent` never reach
+ * this loop at all — see COLLECTIONS.
  */
 export async function resetEverything({ safetyCopy = true, keepInstitute = true } = {}) {
     session.require(CAPABILITIES.DATA_RESTORE, 'erase all data');
@@ -349,7 +367,7 @@ export async function resetEverything({ safetyCopy = true, keepInstitute = true 
         }
     }
 
-    const kept = keepInstitute ? ['settings', 'branches'] : [];
+    const kept = keepInstitute ? ['settings', 'branches', 'feePlans'] : [];
     const cleared = {};
 
     for (const { key, repo } of COLLECTIONS) {
