@@ -366,7 +366,8 @@ export default class FinancePage extends Page {
                     <h2 class="v3-card-title">Ledger</h2>
                     <p class="v3-card-note">
                         Append-only. A mistake is corrected by reversing it, which writes a
-                        contra entry — the original stays.
+                        contra entry — the original stays. Entries posted automatically by a
+                        payment or an expense are reversed from that record, not here.
                     </p>
                 </div>
                 ${l.rows.length ? html`
@@ -384,16 +385,21 @@ export default class FinancePage extends Page {
                                     Sign comes from the AMOUNT, not the type. A
                                     reversal is now a contra entry — the original
                                     type with a negative amount — so keying the
-                                    sign off `type` would have printed "+₹-1,500"
-                                    for the very row that reduces income.
+                                    sign off the type would have printed
+                                    "+₹-1,500" on the very row that reduces
+                                    income.
                                 -->
                                 <span class="v3-chip" data-fee="${r.amount < 0 ? 'overdue' : r.type === 'income' ? 'clear' : 'overdue'}">
                                     ${r.amount < 0 ? '−' : r.type === 'income' ? '+' : '−'}${formatMoney(Math.abs(r.amount))}
                                 </span>
                                 <span class="v3-chip">${formatMoney(r.balance)}</span>
-                                ${session.can(CAPABILITIES.FINANCE_EDIT) && !r.reversed && !r.reversalOf ? html`
+                                ${session.can(CAPABILITIES.FINANCE_EDIT)
+                                    && !r.sourceType && !r.reversed && !r.reversalOf ? html`
                                     <button class="v3-ghost-btn v3-btn-sm" data-action="reverse"
                                             data-id="${r.id}" data-label="${r.narration}">Reverse</button>
+                                ` : ''}
+                                ${r.sourceType && !r.reversed && !r.reversalOf ? html`
+                                    <span class="v3-chip" title="Auto-posted from a ${r.sourceType}. Reverse the ${r.sourceType === 'payment' ? 'payment' : 'source record'} instead.">auto</span>
                                 ` : ''}
                             </div>
                         `)}
