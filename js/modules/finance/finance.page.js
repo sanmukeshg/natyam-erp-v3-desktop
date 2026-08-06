@@ -37,7 +37,7 @@ import { CAPABILITIES, expenseCategories } from '../../config/app.config.js';
 import {
     ACCOUNTS, currentMonthPosition, profitAndLoss, monthlySeries,
     ledgerView, expenseBreakdown, listExpenses, preparePayroll,
-    postEntry, reverseEntry, recordExpense, removeExpense, paySalaries
+    postEntry, reverseEntry, recordExpense, updateExpense, removeExpense, paySalaries
 } from '../../services/finance.service.js';
 import { listBranches } from '../../services/settings.service.js';
 import { formModal, confirmModal } from '../../ui/form.js';
@@ -333,6 +333,10 @@ export default class FinancePage extends Page {
                                 </span>
                                 <span class="v3-chip">${formatMoney(e.amount)}</span>
                                 ${session.can(CAPABILITIES.FINANCE_EDIT) ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-expense"
+                                            data-id="${e.id}">
+                                        Edit
+                                    </button>
                                     <button class="v3-ghost-btn v3-btn-sm" data-action="remove-expense"
                                             data-id="${e.id}" data-label="${e.description || e.category}">
                                         Remove
@@ -574,14 +578,31 @@ export default class FinancePage extends Page {
         await this.load();
     }
 
-    async addExpense() {
-        session.require(CAPABILITIES.FINANCE_EDIT, 'record an expense');
+    /**
+     * One form for recording spending and for editing it afterwards.
+     *
+     * Every field the Record spending dialog offers is editable later — the
+     * request was "everything in this should be editable and delete", and the
+     * cheapest way to guarantee that stays true is for both to be the same
+     * field list rather than two that drift.
+     *
+     * updateExpense() rewrites the linked ledger entry in the same transaction
+     * (see its own body), so correcting a mistyped amount or a wrong category
+     * moves the books with it. That is why editing an EXPENSE is safe where
+     * editing a raw ledger line is not: the expense owns its ledger entry.
+     *
+     * @param {object|null} existing  the expense being edited, or null to record a new one.
+     */
+    async expenseForm(existing = null) {
+        session.require(CAPABILITIES.FINANCE_EDIT, existing ? 'edit an expense' : 'record an expense');
         const branches = await listBranches();
 
         const saved = await formModal({
-            title: 'Record spending',
-            description: 'Writes the expense and its ledger entry together, in one transaction.',
-            submitLabel: 'Record',
+            title: existing ? 'Edit spending' : 'Record spending',
+            description: existing
+                ? 'Changes the expense and its ledger entry together, in one transaction.'
+                : 'Writes the expense and its ledger entry together, in one transaction.',
+            submitLabel: existing ? 'Save changes' : 'Record',
             fields: [
                 /*
                  * expenseCategories(), NOT ACCOUNTS.expense. The two differ by
@@ -607,16 +628,34 @@ export default class FinancePage extends Page {
                   placeholder: 'Choose a branch',
                   options: branches.map((b) => ({ value: b.id, label: b.name })) }
             ],
-            values: {
+            values: existing ? {
+                category: existing.category || '',
+                amount: existing.amount ?? '',
+                date: existing.date || localDate(),
+                description: existing.description || '',
+                paidTo: existing.paidTo || '',
+                branchId: existing.branchId || ''
+            } : {
                 category: '', amount: '', date: localDate(),
                 description: '', paidTo: '', branchId: session.branch() || ''
             },
-            onSubmit: (v) => recordExpense(v)
+            onSubmit: (v) => (existing ? updateExpense(existing.id, v) : recordExpense(v))
         });
 
         if (!saved) return;
-        toast.success('Spending recorded');
+        toast.success(existing ? 'Spending updated' : 'Spending recorded');
         await this.load();
+    }
+
+    /** Kept as the name the "Record spending" button binds to. */
+    addExpense() { return this.expenseForm(null); }
+
+    editExpense(id) {
+        // this.data.expenses — the Spending tab's own rows, which is the only
+        // tab this button appears on.
+        const expense = (this.data?.expenses || []).find((e) => e.id === id);
+        if (!expense) return undefined;
+        return this.expenseForm(expense);
     }
 
     async deleteExpense(id, label) {
@@ -716,6 +755,7 @@ export default class FinancePage extends Page {
 
         this.onDispose(on(root, 'click', '[data-action="post-entry"]', () => this.postManualEntry()));
         this.onDispose(on(root, 'click', '[data-action="add-expense"]', () => this.addExpense()));
+        this.onDispose(on(root, 'click', '[data-action="edit-expense"]', (_e, t) => this.editExpense(t.dataset.id)));
         this.onDispose(on(root, 'click', '[data-action="prepare-payroll"]', () => this.prepareThisPayroll()));
         this.onDispose(on(root, 'click', '[data-action="pay-all"]', () => this.payPayroll()));
         this.onDispose(on(root, 'click', '[data-action="reverse"]', (_e, t) =>
