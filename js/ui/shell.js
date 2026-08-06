@@ -63,7 +63,10 @@ export class Shell {
                 <aside class="v3-sidebar">
                     <div class="v3-brand">
                         <span class="v3-brand-mark" aria-hidden="true">
-                            <img src="assets/icons/icon.svg" alt="">
+                            <!-- The 192 rather than the 48: this renders at 30 CSS px,
+                                 which is 60 device px on a retina screen, so the small
+                                 favicon would arrive visibly soft. -->
+                            <img src="assets/icons/icon-192.png" alt="">
                         </span>
                         <span class="v3-brand-text">
                             <span class="v3-brand-name">NATYAM</span>
