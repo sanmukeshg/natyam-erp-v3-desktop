@@ -36,15 +36,30 @@ import { localDate, monthKey, formatDateLong } from '../../utils/date.js';
 import { CAPABILITIES, expenseCategories } from '../../config/app.config.js';
 import {
     ACCOUNTS, currentMonthPosition, profitAndLoss, monthlySeries,
-    ledgerView, expenseBreakdown, listExpenses, preparePayroll,
-    postEntry, reverseEntry, recordExpense, updateExpense, removeExpense, paySalaries
+    ledgerView, preparePayroll,
+    postEntry, updateEntry, deleteEntry, reverseEntry,
+    recordExpense, getExpense, updateExpense, removeExpense, paySalaries
 } from '../../services/finance.service.js';
 import { listBranches } from '../../services/settings.service.js';
 import { formModal, confirmModal } from '../../ui/form.js';
 
+/*
+ * No Spending tab. Everything is tracked in the Ledger, by decision.
+ *
+ * It read from expense RECORDS while the Ledger read from ledger ENTRIES, so
+ * spending typed straight into the ledger — and payroll — never appeared on it.
+ * Its own note admitted as much. A tab called Spending showing ₹0 while
+ * Expenditure showed ₹12,000 is worse than no tab, and with the Ledger now
+ * carrying Edit and Delete on every row it types itself, there is nothing the
+ * Spending tab could do that the Ledger cannot.
+ *
+ * expensesPanel() and its service calls are gone with it. recordExpense() stays
+ * — "Record spending" still captures a category and a payee, which a bare
+ * ledger line has no field for, and its entry lands in the Ledger like any
+ * other.
+ */
 const TABS = [
     { key: 'position', label: 'This month' },
-    { key: 'expenses', label: 'Spending' },
     { key: 'ledger', label: 'Ledger' },
     { key: 'payroll', label: 'Payroll' }
 ];
@@ -129,12 +144,6 @@ export default class FinancePage extends Page {
                     ledgerView({ from, to, branchId })
                 ]);
                 this.data = { position, pl, series, ledger };
-            } else if (this.tab === 'expenses') {
-                const [breakdown, rows] = await Promise.all([
-                    expenseBreakdown({ from, to, branchId }),
-                    listExpenses({ from, to, branchId })
-                ]);
-                this.data = { breakdown, expenses: rows };
             } else if (this.tab === 'ledger') {
                 this.data = { ledger: await ledgerView({ from, to, branchId }) };
             } else if (this.tab === 'payroll') {
@@ -177,7 +186,6 @@ export default class FinancePage extends Page {
 
     panelFor(tab) {
         if (tab === 'position') return this.positionPanel();
-        if (tab === 'expenses') return this.expensesPanel();
         if (tab === 'ledger') return this.ledgerPanel();
         if (tab === 'payroll') return this.payrollPanel();
         return '';
@@ -286,70 +294,6 @@ export default class FinancePage extends Page {
         `;
     }
 
-    /* -------------------------------------------------------------- SPENDING */
-
-    expensesPanel() {
-        const { breakdown, expenses } = this.data;
-        if (!breakdown) return html`<div class="v3-empty">Nothing to show.</div>`;
-
-        return html`
-            <div class="v3-kpis">
-                ${kpi('Spent', formatMoney(breakdown.total), 'neutral',
-                      `${formatNumber(breakdown.count)} entr${breakdown.count === 1 ? 'y' : 'ies'}`)}
-                ${(breakdown.categories || []).slice(0, 3).map((c) =>
-                    kpi(c.category, formatMoney(c.amount), 'neutral', `${c.share}% of spending`))}
-            </div>
-
-            <section class="v3-card">
-                <div class="v3-card-head">
-                    <h2 class="v3-card-title">Every expense in this range</h2>
-                    <p class="v3-card-note">
-                        Shown as rows, not only as category totals — a mistyped amount is
-                        invisible in an aggregate and cannot be corrected from one.
-                    </p>
-                    <p class="v3-card-note">
-                        <!--
-                            These figures are recorded expenses only, and will not match
-                            total spending on the This-month tab. That tab reads the ledger,
-                            which also carries payroll and anything posted directly to it.
-                            Both are correct; they answer different questions, so the screen
-                            says which is which rather than leaving two totals to be
-                            reconciled by guesswork.
-                        -->
-                        <strong>Recorded expenses only.</strong> Payroll and entries posted
-                        straight to the ledger are not here — the This-month tab's spending
-                        figure covers those too, which is why it is larger.
-                    </p>
-                </div>
-                ${expenses?.length ? html`
-                    <div class="v3-roll">
-                        ${expenses.map((e) => html`
-                            <div class="v3-roll-row" data-static>
-                                <span class="v3-roll-main">
-                                    <span class="v3-roll-name">${e.description || e.category}</span>
-                                    <span class="v3-roll-meta">
-                                        ${e.category} · ${formatDateLong(e.date)}${e.paidTo ? ` · ${e.paidTo}` : ''}
-                                    </span>
-                                </span>
-                                <span class="v3-chip">${formatMoney(e.amount)}</span>
-                                ${session.can(CAPABILITIES.FINANCE_EDIT) ? html`
-                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-expense"
-                                            data-id="${e.id}">
-                                        Edit
-                                    </button>
-                                    <button class="v3-ghost-btn v3-btn-sm" data-action="remove-expense"
-                                            data-id="${e.id}" data-label="${e.description || e.category}">
-                                        Remove
-                                    </button>
-                                ` : ''}
-                            </div>
-                        `)}
-                    </div>
-                ` : html`<div class="v3-empty">Nothing recorded in this range.</div>`}
-            </section>
-        `;
-    }
-
     /* ---------------------------------------------------------------- LEDGER */
 
     ledgerPanel() {
@@ -386,24 +330,33 @@ export default class FinancePage extends Page {
                                     </span>
                                 </span>
                                 <!--
-                                    Sign comes from the AMOUNT, not the type. A
-                                    reversal is now a contra entry — the original
-                                    type with a negative amount — so keying the
-                                    sign off the type would have printed
-                                    "+₹-1,500" on the very row that reduces
-                                    income.
+                                    Math.abs guards a legacy row: entries written
+                                    while reversals were briefly stored as negative
+                                    income would otherwise render "+₹-1,500", which
+                                    is what production showed. New rows are always
+                                    positive.
                                 -->
-                                <span class="v3-chip" data-fee="${r.amount < 0 ? 'overdue' : r.type === 'income' ? 'clear' : 'overdue'}">
-                                    ${r.amount < 0 ? '−' : r.type === 'income' ? '+' : '−'}${formatMoney(Math.abs(r.amount))}
+                                <span class="v3-chip" data-fee="${r.type === 'income' ? 'clear' : 'overdue'}">
+                                    ${r.type === 'income' ? '+' : '−'}${formatMoney(Math.abs(r.amount))}
                                 </span>
                                 <span class="v3-chip">${formatMoney(r.balance)}</span>
+                                ${session.can(CAPABILITIES.FINANCE_EDIT) && !r.sourceType ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-entry"
+                                            data-id="${r.id}">Edit</button>
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="delete-entry"
+                                            data-id="${r.id}" data-label="${r.narration}">Delete</button>
+                                ` : ''}
+                                ${session.can(CAPABILITIES.FINANCE_EDIT) && r.sourceType === 'expense' ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-expense-entry"
+                                            data-id="${r.sourceId}">Edit</button>
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="remove-expense"
+                                            data-id="${r.sourceId}" data-label="${r.narration}">Delete</button>
+                                ` : ''}
                                 ${session.can(CAPABILITIES.FINANCE_EDIT)
-                                    && !r.sourceType && !r.reversed && !r.reversalOf ? html`
+                                    && ['waiver', 'payment', 'refund'].includes(r.sourceType)
+                                    && !r.reversed && !r.reversalOf ? html`
                                     <button class="v3-ghost-btn v3-btn-sm" data-action="reverse"
                                             data-id="${r.id}" data-label="${r.narration}">Reverse</button>
-                                ` : ''}
-                                ${r.sourceType && !r.reversed && !r.reversalOf ? html`
-                                    <span class="v3-chip" title="Auto-posted from a ${r.sourceType}. Reverse the ${r.sourceType === 'payment' ? 'payment' : 'source record'} instead.">auto</span>
                                 ` : ''}
                             </div>
                         `)}
@@ -497,15 +450,28 @@ export default class FinancePage extends Page {
 
     /* ----------------------------------------------------------------- WRITES */
 
-    async postManualEntry() {
-        session.require(CAPABILITIES.FINANCE_EDIT, 'post a ledger entry');
+    /**
+     * One form for posting a hand-typed ledger entry and for correcting one.
+     *
+     * Both kinds are editable — money in and money out alike — because both are
+     * typed by a person and a typo in either is just a typo. An entry posted by
+     * another module is not offered here at all: updateEntry() refuses it, and
+     * the row shows that module's own Edit instead.
+     *
+     * @param {object|null} existing  the entry being corrected, or null to post a new one.
+     */
+    async manualEntryForm(existing = null) {
+        session.require(CAPABILITIES.FINANCE_EDIT, existing ? 'edit a ledger entry' : 'post a ledger entry');
         const branches = await listBranches();
 
         const posted = await formModal({
-            title: 'Post a ledger entry',
-            description: 'For a donation, a ticket sale or a correction. Entries made by '
-                       + 'another module carry their own source and are not typed here.',
-            submitLabel: 'Post',
+            title: existing ? 'Edit ledger entry' : 'Post a ledger entry',
+            description: existing
+                ? 'Corrects the entry in place. Only entries typed here can be edited — '
+                  + 'anything posted by another module is corrected from that record.'
+                : 'For a donation, a ticket sale or a correction. Entries made by '
+                  + 'another module carry their own source and are not typed here.',
+            submitLabel: existing ? 'Save changes' : 'Post',
             fields: [
                 { name: 'type', label: 'Kind', type: 'select', required: true,
                   options: [
@@ -532,22 +498,62 @@ export default class FinancePage extends Page {
                 { name: 'branchId', label: 'Branch', type: 'select', placeholder: 'Whole school',
                   options: branches.map((b) => ({ value: b.id, label: b.name })) }
             ],
-            values: {
+            values: existing ? {
+                type: existing.type,
+                // The account lives in one field or the other depending on kind,
+                // so it is seeded into the matching one and the other left blank.
+                incomeAccount: existing.type === 'income' ? existing.account : '',
+                expenseAccount: existing.type === 'expense' ? existing.account : '',
+                amount: Math.abs(existing.amount),
+                date: existing.date || localDate(),
+                narration: existing.narration || '',
+                branchId: existing.branchId || ''
+            } : {
                 type: 'income', incomeAccount: '', expenseAccount: '',
                 amount: '', date: localDate(), narration: '', branchId: session.branch() || ''
             },
-            onSubmit: (v) => postEntry({
-                type: v.type,
-                account: v.type === 'income' ? v.incomeAccount : v.expenseAccount,
-                amount: v.amount,
-                date: v.date || null,
-                narration: v.narration,
-                branchId: v.branchId || null
-            })
+            onSubmit: (v) => {
+                const payload = {
+                    type: v.type,
+                    account: v.type === 'income' ? v.incomeAccount : v.expenseAccount,
+                    amount: v.amount,
+                    date: v.date || null,
+                    narration: v.narration,
+                    branchId: v.branchId || null
+                };
+                return existing ? updateEntry(existing.id, payload) : postEntry(payload);
+            }
         });
 
         if (!posted) return;
-        toast.success('Entry posted', posted.narration);
+        toast.success(existing ? 'Entry updated' : 'Entry posted', posted.narration);
+        await this.load();
+    }
+
+    /** Kept as the name the "Post entry" button binds to. */
+    postManualEntry() { return this.manualEntryForm(null); }
+
+    editEntry(id) {
+        const entry = (this.data?.rows || []).find((r) => r.id === id);
+        if (!entry) return undefined;
+        return this.manualEntryForm(entry);
+    }
+
+    async deleteEntry(id, label) {
+        const done = await formModal({
+            title: 'Delete this entry',
+            description: `"${label}". This removes it outright — it is a hand-typed entry, so `
+                       + 'there is no other record behind it. The reason is kept in the audit log.',
+            submitLabel: 'Delete',
+            fields: [
+                { name: 'reason', label: 'Why', required: true, placeholder: 'Entered twice, wrong amount…' }
+            ],
+            values: { reason: '' },
+            onSubmit: (v) => deleteEntry(id, { reason: v.reason })
+        });
+
+        if (!done) return;
+        toast.success('Entry deleted');
         await this.load();
     }
 
@@ -650,12 +656,11 @@ export default class FinancePage extends Page {
     /** Kept as the name the "Record spending" button binds to. */
     addExpense() { return this.expenseForm(null); }
 
-    editExpense(id) {
-        // this.data.expenses — the Spending tab's own rows, which is the only
-        // tab this button appears on.
-        const expense = (this.data?.expenses || []).find((e) => e.id === id);
-        if (!expense) return undefined;
-        return this.expenseForm(expense);
+    /** From a Ledger row, where the expense itself is not in hand. */
+    async editExpenseById(id) {
+        const expense = await getExpense(id).catch(() => null);
+        if (!expense) { toast.error('That expense could not be found.'); return; }
+        await this.expenseForm(expense);
     }
 
     async deleteExpense(id, label) {
@@ -755,7 +760,13 @@ export default class FinancePage extends Page {
 
         this.onDispose(on(root, 'click', '[data-action="post-entry"]', () => this.postManualEntry()));
         this.onDispose(on(root, 'click', '[data-action="add-expense"]', () => this.addExpense()));
-        this.onDispose(on(root, 'click', '[data-action="edit-expense"]', (_e, t) => this.editExpense(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="edit-entry"]', (_e, t) => this.editEntry(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="delete-entry"]', (_e, t) =>
+            this.deleteEntry(t.dataset.id, t.dataset.label)));
+        // An expense's ledger row edits the EXPENSE, by its sourceId — that is
+        // what keeps the two in step (updateExpense rewrites both together).
+        this.onDispose(on(root, 'click', '[data-action="edit-expense-entry"]', (_e, t) =>
+            this.editExpenseById(t.dataset.id)));
         this.onDispose(on(root, 'click', '[data-action="prepare-payroll"]', () => this.prepareThisPayroll()));
         this.onDispose(on(root, 'click', '[data-action="pay-all"]', () => this.payPayroll()));
         this.onDispose(on(root, 'click', '[data-action="reverse"]', (_e, t) =>
