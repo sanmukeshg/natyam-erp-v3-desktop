@@ -21,34 +21,32 @@
     color: #fff;
     font-family: var(--font-ui);
 }
-@media (min-width: 901px) {
-    /* Desktop/tablet is a bounded, centered card on a neutral page backdrop
-       — matching the approved artifact's own presentation — rather than the
-       photo stretched to fill the whole viewport, which on a large monitor
-       left the medallion/wordmark looking sparse in a sea of empty terracotta. */
-    .auth-screen {
-        background: var(--neutral-100);
-        display: flex; align-items: center; justify-content: center;
-        padding: var(--space-6);
-    }
-}
 
+/*
+ * Full-bleed at every width, .auth-stage carrying the photograph edge to
+ * edge — the same presentation mobile already has, not a variant of it.
+ *
+ * This used to be a bounded, shadowed card floating on a neutral grey page:
+ * width capped at 1600px, height clamped at 840px, radius, border, shadow.
+ * The reasoning at the time was that stretching the photo edge to edge left
+ * the medallion and wordmark looking sparse on a large monitor — true at the
+ * width the artifact was designed for, but the card's OWN bound became the
+ * more visible problem as monitors outgrew it: on anything wider than 1600px
+ * the page was mostly bare grey with a small card adrift in the middle of
+ * it, which read as unfinished rather than considered.
+ *
+ * landing-desktop-bg.jpg is 1600x893 (~16:9) — a generic lit-wall-and-floor
+ * backdrop with no single focal subject pinned to a corner, so `cover` can
+ * crop its top/bottom at any wide aspect ratio without cutting through
+ * anything the eye was meant to land on. That is what makes stretching it
+ * full-bleed safe now, on the same image, where it was not the reasoning for
+ * boxing it in the first place.
+ */
 .auth-stage { position: relative; min-height: 100vh; min-height: 100dvh; }
 @media (min-width: 901px) {
     .auth-stage {
         display: grid; grid-template-columns: 1fr 1fr;
-        /* Scales with the viewport instead of sitting at a fixed 1360x660 —
-           that fixed size looked fine on a laptop but left a large, clearly
-           unfilled margin of plain backdrop on a big monitor. width grows up
-           to 1600px; min-height grows up to 840px but never drops below the
-           original 660px floor (clamp's lower bound), so short/narrow
-           desktop windows still always have enough room for the sign-in
-           card's content — .auth-stage clips overflow, so that floor matters. */
-        width: min(94vw, 1600px); min-height: clamp(660px, 90vh, 840px);
-        border-radius: var(--radius-xl);
-        overflow: hidden;
-        box-shadow: var(--shadow-lg);
-        border: 1px solid rgba(19, 28, 52, .08);
+        width: 100%; min-height: 100vh; min-height: 100dvh;
         background-image: url("../img/brand/landing-desktop-bg.jpg");
         background-size: cover; background-position: center;
         color: #fff;
