@@ -37,7 +37,7 @@ import { ADMISSION_STATUS, curriculum, CAPABILITIES } from '../../config/app.con
 import { formatMoney } from '../../utils/money.js';
 import {
     pipeline, listApplications, applicationDetail,
-    beginReview, approve, reject, reopen, enrolApplicant,
+    reject, reopen, enrolApplicant,
     submit as submitApplication, validateStep, ADMISSION_STEPS
 } from '../../services/admissions.service.js';
 import { listBranches, listFeePlans } from '../../services/settings.service.js';
@@ -119,7 +119,7 @@ export default class AdmissionsPage extends Page {
             // id, and Reception maps it here. Loaded with the list rather
             // than on opening a sheet so the picker is never empty on first
             // paint. `listBranches` is already imported for the intake form.
-            const [stats, rows, branches] = await Promise.all([
+            const [stats, rows, branches, feePlans] = await Promise.all([
                 pipeline(branchId),
                 // "From parents" is a source, not a status — passing it to the
                 // service's status filter would match nothing and silently
@@ -128,12 +128,18 @@ export default class AdmissionsPage extends Page {
                 listApplications(branchId, {
                     status: this.filter === 'source:parent' ? null : this.filter
                 }),
-                listBranches().catch(() => [])
+                listBranches().catch(() => []),
+                // Loaded with the list for the same reason branches are: the
+                // enrol step needs them and must not be empty on first paint.
+                // Failing soft — a plan list that will not load must not stop
+                // someone opening an application to read it.
+                listFeePlans().catch(() => [])
             ]);
             if (this.disposed) return;
             this.stats = stats;
             this.rows = rows;
             this.branches = branches;
+            this.feePlans = feePlans;
             this.paint();
         } catch (err) {
             if (this.disposed) return;
@@ -272,33 +278,20 @@ export default class AdmissionsPage extends Page {
                                 Submitted by the family through the Natyam app.
                                 ${this.detail.application.applicationNo
                                     ? ''
-                                    : 'A NAT/APP number is issued when you begin review.'}
+                                    : 'A NAT/APP number is issued when you enrol.'}
                             </div>
                         ` : ''}
 
-                        ${this.detail.needsBranch ? html`
-                            <div class="v3-field">
-                                <label class="v3-field-label" for="map-branch">
-                                    Branch${this.detail.preferredBranch
-                                        ? ` — the family asked for “${this.detail.preferredBranch}”`
-                                        : ''}
-                                </label>
-                                <select class="v3-input" id="map-branch" data-role="map-branch">
-                                    <option value="">Decide later</option>
-                                    ${(this.branches || []).map((b) => html`
-                                        <option value="${b.id}"
-                                                ${this.detail.suggestedBranch?.id === b.id ? 'selected' : ''}>
-                                            ${b.name}
-                                        </option>
-                                    `)}
-                                </select>
-                                <p class="v3-field-help">
-                                    The family chose a branch by name from the public site; it is a
-                                    preference, not an ERP record. Map it when you begin review, or
-                                    leave it — enrolling requires a batch, which sets the branch anyway.
-                                </p>
-                            </div>
-                        ` : ''}
+                        <!--
+                            The review-time branch picker that used to sit here is
+                            gone with Begin review. It fed beginReview()'s optional
+                            branchId and offered "Decide later", which enrolment can
+                            no longer honour: the service now requires a branch,
+                            because a self-submitted application has only a NAME on
+                            it. The question is asked in the enrol step below
+                            instead, where it is required and where the answer is
+                            actually used.
+                        -->
 
                         <dl class="v3-facts">
                             ${fact('Applied on', app.appliedOn ? formatDateLong(app.appliedOn) : '—')}
@@ -316,7 +309,7 @@ export default class AdmissionsPage extends Page {
 
                         ${enrolling ? html`
                             <label class="v3-select-label" style="flex-direction:column;align-items:stretch;gap:6px;">
-                                <span>Enrol into which batch?</span>
+                                <span>Enrol into which batch? *</span>
                                 <select class="v3-branch-select" data-role="batch" style="max-width:none;">
                                     <option value="">Choose a batch…</option>
                                     ${(eligibleBatches || []).map((batch) => html`
@@ -331,6 +324,45 @@ export default class AdmissionsPage extends Page {
                                     No batch matches this level yet. Create or open one before enrolling.
                                 </div>
                             `}
+
+                            <label class="v3-select-label" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                <span>On which fee plan? *</span>
+                                <select class="v3-branch-select" data-role="fee-plan" style="max-width:none;">
+                                    <option value="">Choose a fee plan…</option>
+                                    ${(this.feePlans || []).map((plan) => html`
+                                        <option value="${plan.id}"
+                                                ${plan.id === app.feePlanId ? 'selected' : ''}>
+                                            ${plan.name} — ${formatMoney(plan.amount)}
+                                        </option>
+                                    `)}
+                                </select>
+                            </label>
+                            ${this.feePlans?.length ? '' : html`
+                                <div class="v3-notice" data-tone="caution">
+                                    No fee plans are set up yet — add one in Settings before enrolling.
+                                </div>
+                            `}
+
+                            ${!app.branchId ? html`
+                                <label class="v3-select-label" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                    <span>Which branch? *</span>
+                                    <select class="v3-branch-select" data-role="enrol-branch" style="max-width:none;">
+                                        <option value="">Choose a branch…</option>
+                                        ${(this.branches || []).map((b) => html`
+                                            <option value="${b.id}"
+                                                    ${b.id === this.suggestedBranchId(app) ? 'selected' : ''}>
+                                                ${b.name}
+                                            </option>
+                                        `)}
+                                    </select>
+                                </label>
+                                ${app.preferredBranch ? html`
+                                    <div class="v3-notice" data-tone="info">
+                                        The family asked for ${app.preferredBranch}. Confirm the branch
+                                        this application belongs to.
+                                    </div>
+                                ` : ''}
+                            ` : ''}
                         ` : ''}
                     </div>
 
@@ -372,16 +404,11 @@ export default class AdmissionsPage extends Page {
         this.busy = true;
         this.paintDetail();
         try {
-            // Beginning review is where a parent-submitted application gets
-            // its NAT/APP number and, if Reception chose one, its ERP branch.
-            // The picker in the detail sheet defaults to suggestBranchFor()'s
-            // match but is never required — see beginReview()'s own comment
-            // on why an unmapped branch must not block the review.
-            if (key === 'review') {
-                const picked = this.container.querySelector('[data-role="map-branch"]')?.value || null;
-                await beginReview(app.id, { branchId: picked });
-            } else if (key === 'approve') await approve(app.id);
-            else if (key === 'reopen') await reopen(app.id);
+            // 'review' and 'approve' are no longer reachable: nextActionFor()
+            // sends submitted, reviewing and approved all straight to Enrol.
+            // The NAT/APP number and the ERP branch that Begin review used to
+            // allocate are issued at enrolment now — see enrolApplicant().
+            if (key === 'reopen') await reopen(app.id);
             else throw new Error(`"${key}" is not something this screen can do yet.`);
 
             toast.success('Application updated', app.name);
@@ -396,6 +423,22 @@ export default class AdmissionsPage extends Page {
         }
     }
 
+    /**
+     * The branch the family named, matched to a real Branch record.
+     *
+     * Only a default for the picker — the person still confirms. Matched
+     * leniently because the two lists genuinely disagree: the name reached the
+     * parent through hand-written Website Content ("Natyam - Kondapur", hyphen)
+     * while the Branch record is "Natyam – Kondapur" with an en dash, so a
+     * literal comparison would offer no default at all.
+     */
+    suggestedBranchId(app) {
+        const flatten = (s) => String(s || '').toLowerCase().replace(/[‐-―-]/g, '-').replace(/\s+/g, ' ').trim();
+        const asked = flatten(app.preferredBranch);
+        if (!asked) return '';
+        return (this.branches || []).find((b) => flatten(b.name) === asked)?.id || '';
+    }
+
     async enrol(app) {
         const select = this.container.querySelector('[data-role="batch"]');
         const batchId = select?.value;
@@ -404,10 +447,38 @@ export default class AdmissionsPage extends Page {
             return;
         }
 
+        /*
+         * Fee plan and branch, both required — matching natyam-mobile exactly.
+         *
+         * Without a plan enrolApplicant() skips billing silently: no schedule,
+         * no invoice, and a student showing zero fees forever. Without a branch
+         * a self-submitted application cannot be enrolled at all, since the
+         * service now requires one and a parent never supplies an id.
+         *
+         * Checked here rather than trusted to the markup — these are bare
+         * selects in a sheet, not a form, so nothing enforces them on submit.
+         */
+        const feePlanId = this.container.querySelector('[data-role="fee-plan"]')?.value;
+        if (!feePlanId) {
+            toast.error('Choose a fee plan',
+                'Without one the student is enrolled but never billed — no schedule, no invoice.');
+            return;
+        }
+
+        let branchId = null;
+        if (!app.branchId) {
+            branchId = this.container.querySelector('[data-role="enrol-branch"]')?.value || null;
+            if (!branchId) {
+                toast.error('Choose a branch',
+                    'This application arrived from the Natyam app with only a branch name on it.');
+                return;
+            }
+        }
+
         this.busy = true;
         this.paintDetail();
         try {
-            await enrolApplicant(app.id, { batchId });
+            await enrolApplicant(app.id, { batchId, feePlanId, branchId });
             toast.success('Enrolled', `${app.name} is now a student.`);
             this.busy = false;
             this.close();
