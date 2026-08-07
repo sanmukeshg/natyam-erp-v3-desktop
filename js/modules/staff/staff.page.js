@@ -29,7 +29,7 @@ import { formatMoney, formatNumber } from '../../utils/money.js';
 import { localDate, formatDateLong } from '../../utils/date.js';
 import { CAPABILITIES } from '../../config/app.config.js';
 import {
-    STAFF_ROLES, listStaff, staffSummary, teacherDashboard,
+    TEACHING_ROLES, STAFF_ROLES, listStaff, staffSummary, teacherDashboard,
     hire, updateStaff, deactivate, reactivate
 } from '../../services/staff.service.js';
 import { listBranches } from '../../services/settings.service.js';
@@ -119,8 +119,8 @@ export default class StaffPage extends Page {
 
     visibleRows() {
         let rows = this.rows.filter((s) => {
-            if (this.filter === 'teacher') return s.role === 'teacher';
-            if (this.filter === 'unassigned') return s.role === 'teacher' && s.batchCount === 0;
+            if (this.filter === 'teacher') return TEACHING_ROLES.includes(s.role);
+            if (this.filter === 'unassigned') return TEACHING_ROLES.includes(s.role) && s.batchCount === 0;
             if (this.filter === 'inactive') return s.status !== 'active';
             return true;
         });
@@ -179,7 +179,7 @@ export default class StaffPage extends Page {
                                 · ${m.branchNames}
                             </span>
                         </span>
-                        ${m.role === 'teacher' ? html`
+                        ${TEACHING_ROLES.includes(m.role) ? html`
                             <span class="v3-chip" data-fee="${m.batchCount ? 'clear' : 'overdue'}">
                                 ${m.batchCount ? `${m.batchCount} batch${m.batchCount === 1 ? '' : 'es'}` : 'No batches'}
                             </span>
@@ -272,7 +272,7 @@ export default class StaffPage extends Page {
                             </div>
                         ` : html`
                             <p class="v3-modal-note">
-                                ${m.role === 'teacher'
+                                ${TEACHING_ROLES.includes(m.role)
                                     ? 'Not teaching any batch right now.'
                                     : 'This role does not take batches.'}
                             </p>
@@ -385,7 +385,7 @@ export default class StaffPage extends Page {
         if (!m) return;
 
         const teachers = this.rows.filter((r) =>
-            r.role === 'teacher' && r.status === 'active' && r.id !== m.id);
+            TEACHING_ROLES.includes(r.role) && r.status === 'active' && r.id !== m.id);
 
         const done = await formModal({
             title: `End ${m.name}'s employment`,

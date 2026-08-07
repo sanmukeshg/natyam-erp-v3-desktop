@@ -1341,3 +1341,28 @@
     cursor: default;
     background: rgba(255, 255, 255, 0.04);
 }
+
+/*
+ * Trend lists are four months tall — UAT5, asked for directly.
+ *
+ * Twelve months of `.v3-row` runs to 841px, and six such cards made a page
+ * nobody scrolled to the end of. Most of those rows read "0 applied · 0
+ * enrolled" too: a school in its second year has empty history, and printing
+ * it at full height buried the months that had anything in them.
+ *
+ * 4 × 69px, the measured row height, plus a sliver so the fifth row is half
+ * visible — that peek is what tells a reader the list scrolls at all. A cap
+ * with a clean edge reads as the end of the data.
+ *
+ * The JS starts these scrolled to the BOTTOM (scrollTrendsToLatest), because
+ * the rows are chronological and the newest are last.
+ */
+.v3-trend-cap {
+    max-height: 290px;
+    overflow-y: auto;
+    /* Momentum scrolling inside a card, and no scroll-chaining out to the page
+       when the list reaches its end — that jump is what makes an inner scroll
+       feel broken. */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}

@@ -354,6 +354,13 @@ export async function exportStore(key, { pretty = true } = {}) {
  * the price list before they could invoice anybody. Fee amounts are exactly
  * the thing you do not want re-entered from memory.
  *
+ * `staff` and `batches` were added in UAT5 for the same reason, widening the
+ * rule slightly: it is now "if Settings edits it, or if it is the school's
+ * teaching shape, this keeps it". Neither is edited from the Settings module,
+ * but a term ending does not change who teaches or which classes run — and the
+ * two must be kept as a pair, since a batch points at a staff record. See the
+ * note in the body.
+ *
  * NOT kept, deliberately: `auditLog` is a record of what happened to the demo
  * data and means nothing afterwards. `enquiries` and `parentProfiles` are
  * records about people, exactly like students and admissions — a test
@@ -373,7 +380,31 @@ export async function resetEverything({ safetyCopy = true, keepInstitute = true 
         }
     }
 
-    const kept = keepInstitute ? ['settings', 'branches', 'feePlans'] : [];
+    /*
+     * `staff` and `batches` joined this list in UAT5, asked for directly, and
+     * they belong for the same reason branches and fee plans do: they are the
+     * school's SHAPE, not its records. Who teaches, which classes run on which
+     * evenings and at what levels — none of that changes because a term ended,
+     * and rebuilding five batches and their timetables by hand after every
+     * erase is the sort of chore that stops people erasing at all.
+     *
+     * THE TWO MUST BE KEPT TOGETHER — a hard dependency, not a preference. A
+     * batch stores `teacherId`, pointing at a staff document; keep batches
+     * while erasing staff and every class is left assigned to somebody who no
+     * longer exists, which is exactly the orphaned-teacher state deactivate()
+     * goes out of its way to prevent. There is no supported combination where
+     * one is kept and the other is not.
+     *
+     * Rosters are NOT kept and do not need to be: a batch's `enrolled` count is
+     * computed from students by withOccupancy(), never stored on the batch. So
+     * erasing students leaves every kept batch correctly showing zero rather
+     * than a stale figure.
+     *
+     * The Owner's own staff record also lives here now (ENH-512). Erasing staff
+     * would have deleted the record her batches, her timetable and her mobile
+     * dashboard all resolve through, leaving her signed in and teaching nothing.
+     */
+    const kept = keepInstitute ? ['settings', 'branches', 'feePlans', 'staff', 'batches'] : [];
     const cleared = {};
 
     for (const { key, repo } of COLLECTIONS) {

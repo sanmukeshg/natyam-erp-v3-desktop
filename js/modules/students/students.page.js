@@ -502,9 +502,23 @@ export default class StudentsPage extends Page {
                        + (b.capacity && b.enrolled >= b.capacity ? ' (full)' : '')
               })),
               help: 'A student with no batch appears on no register.' },
+            /*
+             * UAT5-BUG-504 — the edit case says what it does now.
+             *
+             * The field was always here, but on edit it carried no help at all,
+             * so changing a plan looked as if it might re-bill and in fact did
+             * nothing visible: updateStudent() writes the field and stops. What
+             * actually happens is that runBillingScheduler() reads
+             * student.feePlanId on its next run, so the change lands on the next
+             * cycle. Said out loud, in the same words natyam-mobile now uses —
+             * where the field was missing from the edit form entirely, which is
+             * what the bug reported.
+             */
             { name: 'feePlanId', label: 'Fee plan', type: 'select', placeholder: 'No plan',
               options: plans.map((p) => ({ value: p.id, label: `${p.name} — ${formatMoney(p.amount)}` })),
-              help: existing ? null : 'Choosing one raises the fee schedule immediately.' },
+              help: existing
+                  ? 'Applies from the next billing cycle. Fees already raised are not changed.'
+                  : 'Choosing one raises the fee schedule immediately.' },
             { name: 'billingFrequency', label: 'Billing frequency', type: 'select',
               placeholder: 'Use the fee plan default',
               options: exposedFeeFrequencies().map((f) => ({ value: f.value, label: f.label })) },

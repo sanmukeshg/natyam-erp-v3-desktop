@@ -1721,12 +1721,22 @@ export default class SettingsPage extends Page {
                        + 'this Firebase project. A safety copy downloads first.',
             submitLabel: 'Erase everything',
             fields: [
-                { name: 'keepInstitute', label: 'Keep your Settings configuration', type: 'switch',
+                /*
+                 * This help text is the ONLY place anyone is told what
+                 * survives, so it has to name everything resetEverything()'s
+                 * `kept` list holds. Staff and batches were added there in
+                 * UAT5; leaving the wording alone would have had the dialog
+                 * promise less than the code delivers — the safer direction to
+                 * be wrong in, but still wrong: somebody would rebuild a
+                 * timetable that had never been deleted.
+                 */
+                { name: 'keepInstitute', label: 'Keep your school’s setup', type: 'switch',
                   switchLabel: 'Yes, keep it',
                   help: 'Keeps school details, branches, fee plans, curriculum, programme types, '
-                      + 'expense categories, roles and website content. Deletes only the records '
-                      + 'about people — students, admissions, attendance, invoices, payments and '
-                      + 'the rest. Your user accounts are never touched either way.' },
+                      + 'expense categories, roles and website content — and your staff and '
+                      + 'batches, so the timetable and who teaches it survive. Deletes only the '
+                      + 'records about people — students, admissions, attendance, invoices, '
+                      + 'payments and the rest. Your user accounts are never touched either way.' },
                 { name: 'confirm', label: 'Type ERASE to confirm', required: true,
                   placeholder: 'ERASE' }
             ],

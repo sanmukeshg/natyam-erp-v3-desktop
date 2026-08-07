@@ -431,12 +431,27 @@ export default class AdmissionsPage extends Page {
      * parent through hand-written Website Content ("Natyam - Kondapur", hyphen)
      * while the Branch record is "Natyam – Kondapur" with an en dash, so a
      * literal comparison would offer no default at all.
+     *
+     * Three fallbacks behind that, added with UAT5-BUG-506 and identical in
+     * natyam-mobile so the two pickers cannot start on different branches for
+     * the same application:
+     *   1. the service's own suggestBranchFor(), already on the detail — it
+     *      matches by containment, which catches an ERP record simply called
+     *      "Kondapur" where the parent wrote the full name;
+     *   2. the only branch, when the school has one;
+     *   3. the branch already being worked in.
      */
     suggestedBranchId(app) {
+        if (this.detail?.suggestedBranch?.id) return this.detail.suggestedBranch.id;
+
+        const branches = this.branches || [];
+        if (branches.length === 1) return branches[0].id;
+
         const flatten = (s) => String(s || '').toLowerCase().replace(/[‐-―-]/g, '-').replace(/\s+/g, ' ').trim();
         const asked = flatten(app.preferredBranch);
-        if (!asked) return '';
-        return (this.branches || []).find((b) => flatten(b.name) === asked)?.id || '';
+        const matched = asked ? branches.find((b) => flatten(b.name) === asked)?.id : null;
+
+        return matched || session.branch() || '';
     }
 
     async enrol(app) {

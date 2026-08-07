@@ -12,6 +12,63 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
+## [3.4.0] — unreleased
+
+UAT Round 5, Phases 1 and 2. Every desktop item in `UAT Round 5 - Phase 1.docx` and
+`UAT Round 5 - Phase 2.docx`, plus the desktop half of items reported against mobile — a
+workflow change lands in both apps or in neither.
+
+BUG-507 (second parent application stuck on "Sending Details") is **not** in this release —
+withdrawn during the round for re-testing.
+
+### Added
+
+- **Analytics rebuilt as a BI dashboard** (ENH-505). Executive KPI cards, auto-generated
+  business insights above the charts, income and expense category splits, students by batch,
+  admissions by month, and filters for date range, branch, academic year, course and batch.
+  A course or batch filter deliberately does **not** narrow the money panels — the ledger
+  carries a branch and nothing finer — and the page says so rather than implying otherwise.
+- **Reverse a fee waiver** (ENH-507), with the waived invoices listed at all. A waiver zeroes
+  the balance and every invoice list filters on `balance > 0`, so a written-off fee had been
+  invisible on every screen and there was nothing to offer a reversal on.
+- **A "Transactions" tab in Finance** (ENH-504). Money in and money out together, newest first,
+  with Edit and Delete on the two kinds that can honestly carry them.
+- **An Owner can be assigned to a batch** (ENH-512). `STAFF_ROLES` gains Owner with
+  `teaches: true`; the picker reads "Taken by" and marks Owners.
+
+### Fixed
+
+- **Three literal `role === 'teacher'` checks blocked the Owner change** (ENH-512). Editing a
+  teacher to Owner was read as a demotion and demanded five batches be reassigned; handing a
+  leaving teacher's classes to the Owner was refused with "is not an active teacher". A fourth
+  in analytics left an Owner teaching every batch out of the teacher comparison.
+- **`byUserEmail()` could resolve a dormant staff record.** Two records may share an email —
+  this school has exactly that — and a plain `find()` returned whichever Firestore handed back
+  first. An active record now wins.
+- **The user edit form could deactivate the last Administrator**, locking the school out. Its
+  Status field routed through `updateUser()`, which knew none of the rules the Deactivate
+  button enforces. Both now share one `assertMayDeactivate()`.
+- **`editEntry()` looked in `this.data.rows`**, which has never existed — Edit on a hand-typed
+  ledger row did nothing at all and said nothing about it.
+- **Payroll was missing from the expense breakdown** (ENH-504 Part 3). It read the `expenses`
+  collection; payroll posts straight to the ledger. Both breakdowns are now ledger-derived.
+- **Fee plan on the student form said nothing on edit** (BUG-504), so changing a plan looked as
+  if it might re-bill and in fact did nothing visible. It now states that the change lands on
+  the next billing cycle.
+
+### Changed
+
+- **Finance leads with a cashbook** (ENH-504). Tabs are Dashboard, Transactions, Payroll and
+  **Advanced accounting** — the Ledger, unchanged, with every row, Edit, Delete and Reverse
+  intact, moved last and renamed for what it is for. Header actions follow the tab.
+- **Erase keeps staff and batches** (UAT5). Who teaches and which classes run are the school's
+  shape, not its records, and rebuilding a timetable by hand after every erase is the chore
+  that stops people erasing. The two are kept as a pair — a batch points at a staff record.
+- **Analytics ranges** are 30 days / 3 / 6 / 12 months / custom, and trend lists are capped at
+  four months, opening at the newest end.
+
+---
+
 ## [3.2.0] — unreleased
 
 Second UAT round. Every desktop item in

@@ -1,9 +1,17 @@
 /**
  * Natyam ERP v3 — Admin — Finance
  *
- * The books. Four distinct jobs, so four tabs rather than one screen trying to
- * be all of them: what the month looks like, where the money went, the ledger
- * itself, and payroll.
+ * A CASHBOOK WITH THE BOOKS BEHIND IT — UAT5 ENH-504.
+ *
+ * Four tabs, in the order the work happens: Dashboard (how the month stands),
+ * Transactions (what moved, and fix it), Payroll (pay people), Advanced
+ * accounting (the ledger, reversals, the audit trail).
+ *
+ * The last of those used to be second and was called "Ledger". Nothing in it
+ * changed — the same rows, the same Edit, Delete and Reverse, the same
+ * append-only rule — but it is no longer what an owner meets on the way to
+ * recording a taxi fare. Everyday money is Transactions; the ledger is for the
+ * month-end and the mistake, and it says so.
  *
  * EVERY AMOUNT IS INTEGER PAISE. There is no floating point in
  * finance.service.js, which is why the P&L adds up — so nothing here divides,
@@ -34,11 +42,18 @@ import { EVENTS } from '../../core/bus.js';
 import { formatMoney, formatNumber } from '../../utils/money.js';
 import { localDate, monthKey, formatDateLong } from '../../utils/date.js';
 import { CAPABILITIES, expenseCategories } from '../../config/app.config.js';
+// The last five are the cashbook layer — UAT5 ENH-504. Same ledger underneath;
+// they read and write it in the owner's vocabulary rather than an accountant's.
+//
+// The comment sits above the statement rather than inside the braces because
+// tools/verify-imports.cjs reads this list with a regex and takes a comment
+// between the braces as part of a binding name.
 import {
-    ACCOUNTS, currentMonthPosition, profitAndLoss, monthlySeries,
+    ACCOUNTS, currentMonthPosition, profitAndLoss,
     ledgerView, preparePayroll,
     postEntry, updateEntry, deleteEntry, reverseEntry,
-    recordExpense, getExpense, updateExpense, removeExpense, paySalaries
+    recordExpense, getExpense, updateExpense, removeExpense, paySalaries,
+    transactions, moneyOutBreakdown, recordTransaction, updateTransaction, deleteTransaction
 } from '../../services/finance.service.js';
 import { listBranches } from '../../services/settings.service.js';
 import { formModal, confirmModal } from '../../ui/form.js';
@@ -58,10 +73,30 @@ import { formModal, confirmModal } from '../../ui/form.js';
  * ledger line has no field for, and its entry lands in the Ledger like any
  * other.
  */
+
+/*
+ * UAT5 ENH-504 — Dashboard and Transactions first, the Ledger last.
+ *
+ * The order is the enhancement, and it is only an order. Nothing has been
+ * removed: the Ledger keeps every row, every Edit, every Reverse, and the
+ * append-only rule it is built on. It stops being the second thing an owner
+ * sees, because for the daily job — what came in, what went out, correct that
+ * typo — it is the wrong tool, and the right one did not exist.
+ *
+ * "Advanced accounting" rather than "Ledger" as the label, on the same
+ * reasoning the Owner gave: it should not dominate the interface but it must
+ * stay reachable. A tab named for what it is FOR tells someone who does not
+ * need it that they do not need it, which a tab named "Ledger" does not.
+ *
+ * It carries no capability of its own. Its contents were always gated by
+ * `finance.edit` per row and the page by `finance.view`, and moving a tab is
+ * not the place to change who can read the books.
+ */
 const TABS = [
-    { key: 'position', label: 'This month' },
-    { key: 'ledger', label: 'Ledger' },
-    { key: 'payroll', label: 'Payroll' }
+    { key: 'position', label: 'Dashboard' },
+    { key: 'transactions', label: 'Transactions' },
+    { key: 'payroll', label: 'Payroll' },
+    { key: 'ledger', label: 'Advanced accounting' }
 ];
 
 export default class FinancePage extends Page {
@@ -82,13 +117,18 @@ export default class FinancePage extends Page {
                     <h1 class="v3-page-title">Finance</h1>
                     <p class="v3-page-sub" data-role="subtitle">Loading…</p>
                 </div>
-                <div class="v3-head-actions">
+                <!--
+                    UAT5 ENH-504 — the actions belong to the tab, not to the page.
+
+                    "Record spending" and "Post entry" used to sit here on every
+                    tab, including Payroll, where neither means anything. They
+                    are the same two writes as before; each now appears where it
+                    is the thing you came to do, which is also what keeps the
+                    ledger's raw Post entry out of the everyday view.
+                -->
+                <div class="v3-head-actions" data-role="actions">
                     <input class="v3-branch-select" type="month" data-role="period" value="${this.period}"
                            max="${monthKey()}" aria-label="Month">
-                    ${session.can(CAPABILITIES.FINANCE_EDIT) ? html`
-                        <button class="v3-ghost-btn v3-btn-md" data-action="add-expense">Record spending</button>
-                        <button class="v3-action-btn v3-btn-md" data-action="post-entry">Post entry</button>
-                    ` : ''}
                 </div>
             </div>
             <div class="v3-page-body">
@@ -137,13 +177,22 @@ export default class FinancePage extends Page {
                 // compare them — see reconciliation() below. One extra read on
                 // a tab that already does three, in exchange for never printing
                 // a net figure the ledger contradicts without saying so.
-                const [position, pl, series, ledger] = await Promise.all([
+                // monthlySeries() is no longer among them: the six-month block
+                // it fed moved to Analytics with ENH-504 Part 2, so this tab
+                // stopped paying for a query whose output it no longer draws.
+                const [position, pl, ledger] = await Promise.all([
                     currentMonthPosition(branchId),
                     profitAndLoss({ from, to, branchId }),
-                    monthlySeries(6, branchId),
                     ledgerView({ from, to, branchId })
                 ]);
-                this.data = { position, pl, series, ledger };
+                this.data = { position, pl, ledger };
+            } else if (this.tab === 'transactions') {
+                const [pl, ledger, breakdown] = await Promise.all([
+                    profitAndLoss({ from, to, branchId }),
+                    transactions({ from, to, branchId }),
+                    moneyOutBreakdown({ from, to, branchId })
+                ]);
+                this.data = { pl, cashbook: ledger, breakdown };
             } else if (this.tab === 'ledger') {
                 this.data = { ledger: await ledgerView({ from, to, branchId }) };
             } else if (this.tab === 'payroll') {
@@ -181,11 +230,37 @@ export default class FinancePage extends Page {
         const { from, to } = this.range();
         render(this.container.querySelector('[data-role="subtitle"]'),
             `${formatDateLong(from)} to ${formatDateLong(to)}`);
+        this.paintActions();
         render(this.container.querySelector('[data-role="panel"]'), this.panelFor(this.tab));
+    }
+
+    /**
+     * The header's action buttons, chosen by tab.
+     *
+     * The month picker is rendered once and left alone — it applies to every
+     * tab, and re-rendering it would throw away a half-typed month.
+     */
+    paintActions() {
+        const host = this.container.querySelector('[data-role="actions"]');
+        if (!host) return;
+
+        host.querySelectorAll('[data-role="tab-action"]').forEach((node) => node.remove());
+        if (!session.can(CAPABILITIES.FINANCE_EDIT)) return;
+
+        const buttons = this.tab === 'transactions'
+            ? html`<button class="v3-action-btn v3-btn-md" data-role="tab-action"
+                           data-action="add-transaction">Add transaction</button>`
+            : this.tab === 'ledger'
+                ? html`<button class="v3-action-btn v3-btn-md" data-role="tab-action"
+                               data-action="post-entry">Post entry</button>`
+                : '';
+
+        if (buttons) host.insertAdjacentHTML('beforeend', String(buttons));
     }
 
     panelFor(tab) {
         if (tab === 'position') return this.positionPanel();
+        if (tab === 'transactions') return this.transactionsPanel();
         if (tab === 'ledger') return this.ledgerPanel();
         if (tab === 'payroll') return this.payrollPanel();
         return '';
@@ -229,10 +304,9 @@ export default class FinancePage extends Page {
     }
 
     positionPanel() {
-        const { position: p, pl, series } = this.data;
+        const { position: p, pl } = this.data;
         if (!pl) return html`<div class="v3-empty">Nothing to show.</div>`;
 
-        const peak = Math.max(1, ...(series || []).map((m) => Math.max(m.income, m.expense)));
         const gap = this.reconciliation();
 
         return html`
@@ -256,33 +330,26 @@ export default class FinancePage extends Page {
                 ${kpi('Entries', formatNumber(pl.entryCount), 'neutral', 'Posted in this range')}
             </div>
 
-            ${series?.length ? html`
+            <!--
+                UAT5 ENH-504 Part 2 — the six-month block is on Analytics now.
+
+                Six months of two figures was never wrong, only stranded: it
+                could not be widened, narrowed or dated, because this tab is
+                fixed to one month. Analytics already owned ranges and now owns
+                a Money series drawing exactly these bars over 30 days to any
+                custom window. Keeping a second, poorer copy here would mean two
+                screens answering the same question differently.
+            -->
+            ${session.can(CAPABILITIES.REPORT_VIEW) ? html`
                 <section class="v3-card">
-                    <div class="v3-card-head"><h2 class="v3-card-title">Last six months</h2></div>
-                    <!--
-                        Bars drawn as divs rather than a chart library: ui/chart.js
-                        belongs to v2's stylesheet, which this app never loads, and
-                        six months of two figures does not justify a dependency.
-                    -->
-                    <div class="v3-list">
-                        ${series.map((m) => html`
-                            <div class="v3-row">
-                                <div class="v3-row-main">
-                                    <div class="v3-row-title">${m.label || m.period}</div>
-                                    <div class="v3-trend">
-                                        <span class="v3-trend-bar" data-tone="positive"
-                                              style="width:${Math.round((m.income / peak) * 100)}%"
-                                              title="Income ${formatMoney(m.income)}"></span>
-                                        <span class="v3-trend-bar" data-tone="negative"
-                                              style="width:${Math.round((m.expense / peak) * 100)}%"
-                                              title="Spending ${formatMoney(m.expense)}"></span>
-                                    </div>
-                                </div>
-                                <span class="v3-chip" data-fee="${m.net >= 0 ? 'clear' : 'overdue'}">
-                                    ${formatMoney(m.net)}
-                                </span>
-                            </div>
-                        `)}
+                    <div class="v3-card-head">
+                        <h2 class="v3-card-title">Trends</h2>
+                        <p class="v3-card-note">
+                            Money in against money out, over any range — 30 days to a custom window.
+                        </p>
+                    </div>
+                    <div class="v3-card-body">
+                        <a class="v3-ghost-btn" href="#/analytics?series=money&months=6">View trends</a>
                     </div>
                 </section>
             ` : ''}
@@ -291,6 +358,106 @@ export default class FinancePage extends Page {
                 ${accountCard('Where income came from', pl.income)}
                 ${accountCard('Where it went', pl.expense)}
             </div>
+        `;
+    }
+
+    /* ---------------------------------------------------------- TRANSACTIONS */
+
+    /**
+     * The cashbook — UAT5 ENH-504 Part 1.
+     *
+     * Everything the school's money did this month, newest first, in the words
+     * an owner uses for it. Money in, money out, and Edit or Delete on the two
+     * kinds that can honestly carry them.
+     *
+     * WHY NOT JUST USE THE LEDGER? Because the ledger's job is to be complete
+     * and permanent, and this one's is to be worked in. It shows a running
+     * balance, both halves of every reversal, and an account column, all of
+     * which are correct and none of which help someone fixing yesterday's taxi
+     * fare. transactions() drops the reversal pairs so the list adds up to the
+     * Net above it; ledgerView() keeps them because that is the audit trail.
+     * Same books, two readings, and the Advanced tab still has the other one.
+     */
+    transactionsPanel() {
+        const { pl, cashbook, breakdown } = this.data;
+        if (!cashbook) return html`<div class="v3-empty">Nothing to show.</div>`;
+
+        const canEdit = session.can(CAPABILITIES.FINANCE_EDIT);
+        const rows = cashbook.rows || [];
+
+        return html`
+            <div class="v3-kpis">
+                ${kpi('Money in', formatMoney(cashbook.income), 'positive')}
+                ${kpi('Money out', formatMoney(cashbook.expense), 'neutral', 'Payroll included')}
+                ${kpi('Net', formatMoney(cashbook.net), cashbook.net >= 0 ? 'positive' : 'negative',
+                      pl?.margin === null || pl?.margin === undefined ? '' : `${pl.margin}% margin`)}
+                ${kpi('Transactions', formatNumber(rows.length), 'neutral', `In ${formatDateLong(this.range().from)}’s month`)}
+            </div>
+
+            ${breakdown?.categories?.length ? html`
+                <section class="v3-card">
+                    <div class="v3-card-head">
+                        <h2 class="v3-card-title">Where it went</h2>
+                        <!--
+                            Part 3 of the enhancement, and the reason this reads the
+                            ledger rather than the expenses collection: payroll never
+                            wrote to that collection, so the wage bill — the school's
+                            largest outgoing — was missing from this list entirely.
+                        -->
+                        <p class="v3-card-note">
+                            Every rupee out, payroll and hand-posted entries included.
+                        </p>
+                    </div>
+                    <div class="v3-card-body">
+                        ${breakdown.categories.map((c) => html`
+                            <div class="v3-meter">
+                                <div class="v3-meter-head">
+                                    <span>${c.category}</span>
+                                    <span>${formatMoney(c.amount)} · ${c.share}%</span>
+                                </div>
+                                <div class="v3-meter-track">
+                                    <div class="v3-meter-fill" style="width:${c.share}%;"></div>
+                                </div>
+                            </div>
+                        `)}
+                    </div>
+                </section>
+            ` : ''}
+
+            <section class="v3-card">
+                <div class="v3-card-head">
+                    <h2 class="v3-card-title">Transactions</h2>
+                    <p class="v3-card-note">
+                        Money in and money out together. A fee payment, a salary or a reversal is
+                        corrected from the record that created it — the row says which.
+                    </p>
+                </div>
+                ${rows.length ? html`
+                    <div class="v3-roll">
+                        ${rows.map((r) => html`
+                            <div class="v3-roll-row" data-static>
+                                <span class="v3-roll-main">
+                                    <span class="v3-roll-name">${r.description || r.category}</span>
+                                    <span class="v3-roll-meta">
+                                        ${formatDateLong(r.date)} · ${r.category}${
+                                            r.editable ? '' : ` · ${r.lockedReason}`
+                                        }
+                                    </span>
+                                </span>
+                                <span class="v3-chip" data-fee="${r.type === 'income' ? 'clear' : 'overdue'}">
+                                    ${r.type === 'income' ? '+' : '−'}${formatMoney(r.amount)}
+                                </span>
+                                ${canEdit && r.editable ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-transaction"
+                                            data-id="${r.id}">Edit</button>
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="delete-transaction"
+                                            data-id="${r.id}">Delete</button>
+                                ` : ''}
+                            </div>
+                        `)}
+                    </div>
+                ` : html`<div class="v3-empty">Nothing recorded in this range.</div>`}
+            </section>
         `;
     }
 
@@ -534,9 +701,141 @@ export default class FinancePage extends Page {
     postManualEntry() { return this.manualEntryForm(null); }
 
     editEntry(id) {
-        const entry = (this.data?.rows || []).find((r) => r.id === id);
-        if (!entry) return undefined;
+        // `this.data.ledger.rows`, not `this.data.rows` — the latter has never
+        // existed, so Edit on a hand-typed ledger row did nothing at all and
+        // said nothing about it. Found while restructuring these tabs.
+        const entry = (this.data?.ledger?.rows || []).find((r) => r.id === id);
+        if (!entry) { toast.error('That entry is no longer on this page. Reload and try again.'); return undefined; }
         return this.manualEntryForm(entry);
+    }
+
+    /* ------------------------------------------------- CASHBOOK (ENH-504) */
+
+    /**
+     * Money in or money out, in one dialog.
+     *
+     * Deliberately NOT manualEntryForm(): that form speaks in ledger accounts
+     * and posts a raw entry, which is the Advanced tab's job. This one asks the
+     * four things the enhancement lists and lets recordTransaction() decide
+     * where they land — money out through recordExpense(), so the expense record
+     * and its payee survive, money in as a ledger entry.
+     */
+    async addTransaction() {
+        session.require(CAPABILITIES.FINANCE_EDIT, 'record a transaction');
+        const branches = await listBranches();
+
+        const saved = await formModal({
+            title: 'Add a transaction',
+            description: 'Money out is anything the school paid for. Money in is income it received.',
+            submitLabel: 'Record',
+            fields: [
+                { name: 'type', label: 'Kind', type: 'select', required: true,
+                  options: [
+                      { value: 'expense', label: 'Money out — the school paid' },
+                      { value: 'income', label: 'Money in — the school received' }
+                  ] },
+                { name: 'date', label: 'Date', type: 'date',
+                  validate: (v) => v && v > localDate() ? 'A transaction cannot be dated in the future.' : null },
+                // Salaries is absent from money out on purpose — payroll already
+                // posts every wage it pays, so a hand-typed one would double it.
+                // See the same decision in natyam-mobile's finance page.
+                { name: 'expenseCategory', label: 'Category', type: 'select', required: true,
+                  placeholder: 'Choose a category',
+                  options: expenseCategories().filter((c) => c !== 'Salaries').map((c) => ({ value: c, label: c })),
+                  showIf: (v) => v.type === 'expense' },
+                { name: 'incomeCategory', label: 'Category', type: 'select', required: true,
+                  placeholder: 'Choose a category',
+                  options: ACCOUNTS.income.map((c) => ({ value: c, label: c })),
+                  showIf: (v) => v.type === 'income' },
+                { name: 'description', label: 'What for', required: true,
+                  placeholder: 'Costume hire for Annual Day' },
+                { name: 'amount', label: 'Amount', type: 'money', required: true, min: 1 },
+                { name: 'paidTo', label: 'Paid to', showIf: (v) => v.type === 'expense' },
+                { name: 'branchId', label: 'Branch', type: 'select', required: true,
+                  placeholder: 'Choose a branch',
+                  options: branches.map((b) => ({ value: b.id, label: b.name })) }
+            ],
+            values: {
+                type: 'expense', date: localDate(),
+                expenseCategory: '', incomeCategory: '',
+                description: '', amount: '', paidTo: '',
+                branchId: session.branch() || ''
+            },
+            onSubmit: (v) => recordTransaction({
+                type: v.type,
+                category: v.type === 'income' ? v.incomeCategory : v.expenseCategory,
+                amount: v.amount,
+                description: v.description,
+                date: v.date || null,
+                branchId: v.branchId,
+                paidTo: v.type === 'expense' ? v.paidTo : null
+            })
+        });
+
+        if (!saved) return;
+        toast.success('Transaction recorded');
+        await this.load();
+    }
+
+    async editTransaction(id) {
+        const row = (this.data?.cashbook?.rows || []).find((r) => r.id === id);
+        if (!row) return;
+        if (!row.editable) { toast.error('Cannot be edited here', row.lockedReason); return; }
+
+        const categories = row.type === 'income'
+            ? ACCOUNTS.income
+            : expenseCategories().filter((c) => c !== 'Salaries');
+
+        const saved = await formModal({
+            title: 'Edit transaction',
+            description: row.expenseId
+                ? 'Changes the expense and its ledger entry together, in one transaction.'
+                : 'Corrects the ledger entry in place.',
+            submitLabel: 'Save changes',
+            fields: [
+                { name: 'date', label: 'Date', type: 'date',
+                  validate: (v) => v && v > localDate() ? 'A transaction cannot be dated in the future.' : null },
+                // The row's own category is forced in, so an entry already on an
+                // account this form would not offer cannot silently lose it.
+                { name: 'category', label: 'Category', type: 'select', required: true,
+                  options: [...new Set([row.category, ...categories])].map((c) => ({ value: c, label: c })) },
+                { name: 'description', label: 'What for', required: true },
+                { name: 'amount', label: 'Amount', type: 'money', required: true, min: 1 }
+            ],
+            values: {
+                date: row.date,
+                category: row.category,
+                description: row.description || '',
+                amount: row.amount
+            },
+            onSubmit: (v) => updateTransaction(row, v)
+        });
+
+        if (!saved) return;
+        toast.success('Transaction updated');
+        await this.load();
+    }
+
+    async removeTransaction(id) {
+        const row = (this.data?.cashbook?.rows || []).find((r) => r.id === id);
+        if (!row) return;
+        if (!row.editable) { toast.error('Cannot be deleted here', row.lockedReason); return; }
+
+        const done = await formModal({
+            title: 'Delete this transaction',
+            description: `"${row.description || row.category}" — ${formatMoney(row.amount)}. `
+                       + 'The reason is kept in the audit log.',
+            submitLabel: 'Delete',
+            fields: [
+                { name: 'reason', label: 'Why', required: true, placeholder: 'Entered twice, wrong amount…' }
+            ],
+            values: { reason: '' },
+            onSubmit: (v) => deleteTransaction(row, { reason: v.reason })
+        });
+
+        if (!done) return;
+        toast.success('Transaction deleted');
+        await this.load();
     }
 
     async deleteEntry(id, label) {
@@ -653,8 +952,14 @@ export default class FinancePage extends Page {
         await this.load();
     }
 
-    /** Kept as the name the "Record spending" button binds to. */
-    addExpense() { return this.expenseForm(null); }
+    /*
+     * "Record spending" is gone — ENH-504. Its one job, typing money out, is
+     * what Add transaction on the Transactions tab now does, through
+     * recordTransaction(), which routes money out to recordExpense() anyway. So
+     * this form has exactly one caller left: editing an expense that already
+     * exists. Two buttons that wrote the same record was the duplication; the
+     * form itself is still needed, and is still the same fields.
+     */
 
     /** From a Ledger row, where the expense itself is not in hand. */
     async editExpenseById(id) {
@@ -759,7 +1064,14 @@ export default class FinancePage extends Page {
         }));
 
         this.onDispose(on(root, 'click', '[data-action="post-entry"]', () => this.postManualEntry()));
-        this.onDispose(on(root, 'click', '[data-action="add-expense"]', () => this.addExpense()));
+
+        // The cashbook — ENH-504.
+        this.onDispose(on(root, 'click', '[data-action="add-transaction"]', () => this.addTransaction()));
+        this.onDispose(on(root, 'click', '[data-action="edit-transaction"]', (_e, t) =>
+            this.editTransaction(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="delete-transaction"]', (_e, t) =>
+            this.removeTransaction(t.dataset.id)));
+
         this.onDispose(on(root, 'click', '[data-action="edit-entry"]', (_e, t) => this.editEntry(t.dataset.id)));
         this.onDispose(on(root, 'click', '[data-action="delete-entry"]', (_e, t) =>
             this.deleteEntry(t.dataset.id, t.dataset.label)));

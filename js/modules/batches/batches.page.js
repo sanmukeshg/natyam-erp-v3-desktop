@@ -364,13 +364,27 @@ export default class BatchesPage extends Page {
             { name: 'levels', label: 'Levels', type: 'checks', required: true, itemNoun: 'level',
               options: curriculum().map((l) => ({ value: l.value, label: l.label })),
               help: 'Students at any of these levels can be placed here.' },
-            { name: 'teacherId', label: 'Teacher', type: 'select', placeholder: 'Not assigned yet',
+            /*
+             * "Taken by", not "Teacher" — UAT5 ENH-512.
+             *
+             * The list now holds every staff role whose `teaches` flag is set,
+             * which is Teacher and Owner. The field still writes `teacherId`
+             * and still points at a staff record, so batches, registers,
+             * timetables and conflict detection are untouched; only who may
+             * appear in it has widened. Renaming the label is the honest half
+             * of that — a list containing the Owner under a heading that says
+             * "Teacher" invites the very duplicate account this removes.
+             */
+            { name: 'teacherId', label: 'Taken by', type: 'select', placeholder: 'Not assigned yet',
               options: teachers.map((t) => ({
                   value: t.id,
-                  label: t.available
-                      ? `${t.name} — ${t.load} batch${t.load === 1 ? '' : 'es'}`
-                      : `${t.name} — busy (${t.clashWith})`
-              })) },
+                  label: `${t.name}${t.role === 'owner' ? ' (Owner)' : ''} — ${
+                      t.available
+                          ? `${t.load} batch${t.load === 1 ? '' : 'es'}`
+                          : `busy (${t.clashWith})`
+                  }`
+              })),
+              help: 'Teachers and Owners who teach. An Owner needs no second Teacher account.' },
             { name: 'days', label: 'Days', type: 'checks', required: true, itemNoun: 'day',
               options: WEEK.map((d) => ({ value: d, label: DAY_LABELS[d] || d })),
               help: 'The register only exists on these days.' },

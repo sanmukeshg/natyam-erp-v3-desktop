@@ -35,7 +35,7 @@ import { formatMoney, formatMoneyShort } from '../../utils/money.js';
 import { formatDate, formatDateLong, localDate, startOfMonth } from '../../utils/date.js';
 import { PAYMENT_MODES } from '../../config/app.config.js';
 import { listStudents } from '../../services/students.service.js';
-import { collectionSummary, studentFeeSummary, recordPayment, waiveInvoice } from '../../services/fees.service.js';
+import { collectionSummary, studentFeeSummary, recordPayment, waiveInvoice, reverseWaiver } from '../../services/fees.service.js';
 import { formModal } from '../../ui/form.js';
 
 const FILTERS = [
@@ -134,6 +134,42 @@ export default class FeesPage extends Page {
 
         if (!done) return;
         toast.success('Invoice waived', invoice.number);
+        await this.load();
+    }
+
+    /**
+     * Undoing a waiver — UAT5 ENH-507.
+     *
+     * The reason is OPTIONAL here, unlike the waiver itself, and the asymmetry
+     * is the business rule rather than an oversight: writing money off needs
+     * justifying, while a family turning up to pay after all does not. The
+     * audit row records who and when regardless.
+     *
+     * The dialog spells out both halves, because "reverse" alone does not say
+     * whether the family owes the money again — and that is the only part they
+     * will be asked about.
+     */
+    async reverseWaiverFor(invoiceId) {
+        const invoice = (this.detail?.fees?.invoices || []).find((i) => i.id === invoiceId);
+        if (!invoice) return;
+
+        const amount = invoice.waivedAmount || invoice.amount || 0;
+
+        const done = await formModal({
+            title: `Reverse the waiver on ${invoice.number}?`,
+            description: `${formatMoney(amount)} becomes payable again, and the Money Out the waiver `
+                + 'recorded is cancelled by a matching entry. Both stay in the books.',
+            submitLabel: 'Reverse waiver',
+            fields: [
+                { name: 'reason', label: 'Reason', type: 'textarea', rows: 2,
+                  help: 'Optional. Kept in the audit log with your name and the date.' }
+            ],
+            values: { reason: '' },
+            onSubmit: (v) => reverseWaiver(invoice.id, { reason: v.reason })
+        });
+
+        if (!done) return;
+        toast.success('Waiver reversed', `${formatMoney(amount)} is payable again.`);
         await this.load();
     }
 
@@ -266,6 +302,19 @@ export default class FeesPage extends Page {
             .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
         const settled = (fees.invoices || []).filter((i) => i.balance <= 0 || i.status === 'cancelled');
 
+        /*
+         * Waived invoices, listed separately — UAT5 ENH-507.
+         *
+         * They cannot join `open`: a waiver zeroes the balance, which is that
+         * filter, so a written-off fee fell into `settled` beside the paid ones
+         * with nothing to distinguish it and nothing to act on. That is why the
+         * bug existed — after a waiver was taken, no screen could offer a way
+         * back.
+         */
+        const waived = (fees.invoices || [])
+            .filter((i) => i.status === 'waived')
+            .sort((a, b) => (b.waivedOn || '').localeCompare(a.waivedOn || ''));
+
         render(target, html`
             <div class="v3-modal-scrim" data-role="scrim">
                 <div class="v3-modal" role="dialog" aria-modal="true" aria-label="${student?.name || 'Fees'}">
@@ -294,6 +343,43 @@ export default class FeesPage extends Page {
                             </div>
                         ` : fees.onTrack ? html`
                             <div class="v3-notice" data-tone="info">Nothing outstanding — this student is paid up.</div>
+                        ` : ''}
+
+                        <!--
+                          UAT5 ENH-507 — written-off fees, and the way back.
+
+                          Visible to anyone who can read the sheet, because a
+                          waiver is part of the family's fee history and burying
+                          it among the settled invoices made the money simply
+                          vanish. Only fee.waive gets the button: the capability
+                          that took the waiver undoes it, which is what
+                          reverseWaiver() itself enforces.
+                        -->
+                        ${waived.length ? html`
+                            <h3 class="v3-card-title" style="font-size:var(--text-sm);">Waived</h3>
+                            ${waived.map((invoice) => html`
+                                <div class="v3-invoice">
+                                    <div class="v3-invoice-head">
+                                        <div class="v3-row-main">
+                                            <div class="v3-row-title">${invoice.number || 'Invoice'}</div>
+                                            <div class="v3-row-detail">
+                                                ${invoice.waivedOn ? `Waived ${formatDateLong(invoice.waivedOn)}` : 'Waived'}${
+                                                    invoice.waiverReason ? ` · ${invoice.waiverReason}` : ''
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="v3-invoice-amount">
+                                            <span class="v3-chip">${formatMoney(invoice.waivedAmount || invoice.amount || 0)}</span>
+                                            ${session.can('fee.waive') ? html`
+                                                <button class="v3-action-btn v3-btn-sm"
+                                                        data-action="reverse-waiver" data-id="${invoice.id}">
+                                                    Reverse waiver
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `)}
                         ` : ''}
 
                         ${open.length ? html`
@@ -499,6 +585,7 @@ export default class FeesPage extends Page {
         }));
 
         this.onDispose(on(root, 'click', '[data-action="waive"]', (_e, t) => this.waive(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="reverse-waiver"]', (_e, t) => this.reverseWaiverFor(t.dataset.id)));
 
         this.onDispose(on(root, 'click', '[data-action="collect"]', (_e, t) => {
             this.payingInvoiceId = this.payingInvoiceId === t.dataset.id ? null : t.dataset.id;
