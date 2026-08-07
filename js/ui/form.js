@@ -508,9 +508,19 @@ function escapeAttr(value) {
 
 /**
  * A yes/no confirm in the same language as the form.
+ *
+ * `cancelLabel` and `tone: null` exist for the enrolment summary (UAT5-BUG-506
+ * on mobile, UAT6 BUG-601 here), where the dialog is a CONFIRMATION rather than
+ * a warning: it restates choices already made and its negative button goes back
+ * to change them ("Edit"), so "Cancel" would be a lie and a caution-toned
+ * notice would colour a plain summary as a problem. Both keep their old
+ * defaults, so every existing call is unchanged. Matches natyam-mobile.
+ *
  * @returns {Promise<boolean>}
  */
-export function confirmModal({ title, message, confirmLabel = 'Confirm', tone = 'caution' }) {
+export function confirmModal({
+    title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'caution'
+}) {
     return new Promise((resolve) => {
         const host = document.createElement('div');
         host.className = 'v3-form-host';
@@ -539,10 +549,10 @@ export function confirmModal({ title, message, confirmLabel = 'Confirm', tone = 
                         <h2 class="v3-modal-title">${title}</h2>
                     </div>
                     <div class="v3-modal-body">
-                        <div class="v3-notice" data-tone="${tone}">${message}</div>
+                        ${tone ? html`<div class="v3-notice" data-tone="${tone}">${message}</div>` : message}
                     </div>
                     <div class="v3-modal-foot">
-                        <button class="v3-ghost-btn v3-btn-md" data-action="no">Cancel</button>
+                        <button class="v3-ghost-btn v3-btn-md" data-action="no">${cancelLabel}</button>
                         <button class="v3-action-btn v3-btn-md" data-action="yes">${confirmLabel}</button>
                     </div>
                 </div>

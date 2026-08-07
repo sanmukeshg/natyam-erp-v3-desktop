@@ -34,14 +34,15 @@ import { toast } from '../../ui/toast.js';
 import { session } from '../../core/session.js';
 import { EVENTS } from '../../core/bus.js';
 import { formatMoney } from '../../utils/money.js';
-import { formatDateLong, localDate } from '../../utils/date.js';
+import { formatDateLong } from '../../utils/date.js';
 import {
     listStudents, listFilters, profile, enrol, updateStudent,
     promote, setStatus, assignToBatch
 } from '../../services/students.service.js';
 import { listBatches } from '../../services/batches.service.js';
 import { listBranches, listFeePlans } from '../../services/settings.service.js';
-import { curriculum, exposedFeeFrequencies, CAPABILITIES, STUDENT_STATUS } from '../../config/app.config.js';
+import { curriculum, levelsOf, levelLabel, CAPABILITIES, STUDENT_STATUS } from '../../config/app.config.js';
+import { studentFormFields, seedStudentValues } from '../../config/studentFields.js';
 import { formModal, confirmModal } from '../../ui/form.js';
 
 /** The quick filters the design shows as pills. */
@@ -457,6 +458,17 @@ export default class StudentsPage extends Page {
      * dividers rather than split across a wizard the school would have to
      * click through for every walk-in.
      *
+     * THE FIELDS THEMSELVES ARE NOT DECLARED HERE ANY MORE — UAT6 ENH-602.
+     * `js/config/studentFields.js` owns them, and natyam-mobile's Students
+     * screen and both apps' Admissions enrol step build from the same call, so
+     * a field that is mandatory is mandatory on every surface and the sentence
+     * shown when it is left blank is the same one everywhere. What this page
+     * still decides is presentation and which lists to offer.
+     *
+     * Batches are fetched for EVERY branch, not `session.branch()`: the form's
+     * own Branch field narrows them (UAT6 BUG-602), and a session filtered to
+     * one branch must not stop somebody moving a student to another.
+     *
      * NOT INCLUDED: the reference form's `curriculumId` field. Curriculum here
      * means a course of study owned by the Programmes module, which is Phase 2
      * (`/programmes` is still `load: null`), so there is no listCurricula() in
@@ -464,96 +476,22 @@ export default class StudentsPage extends Page {
      * it is assignable later. Added when Programmes is.
      */
     async studentFields(existing = null) {
-        const [batches, plans, branches] = await Promise.all([
-            listBatches(session.branch()),
-            listFeePlans(),
+        const [batches, feePlans, branches] = await Promise.all([
+            listBatches(null),
+            // includeInactive so a student already on a retired plan keeps it —
+            // studentFormFields() hides every other retired plan (UAT6).
+            listFeePlans({ includeInactive: true }),
             listBranches()
         ]);
 
-        const open = batches.filter((b) => b.status !== 'closed');
-
-        // Every student must belong to a branch — the repository enforces it.
-        // One created against a batch inherits the batch's branch, but one
-        // without a batch had no way to supply it and the save was rejected
-        // with no field to correct.
-        const defaultBranchId = existing?.branchId
-            || session.branch()
-            || (branches.length === 1 ? branches[0].id : '');
-
-        const fields = [
-            { name: 'name', label: 'Full name', required: true },
-            { name: 'dateOfBirth', label: 'Date of birth', type: 'date' },
-            { name: 'gender', label: 'Gender', type: 'select', placeholder: 'Not recorded',
-              options: [
-                  { value: 'female', label: 'Female' },
-                  { value: 'male', label: 'Male' },
-                  { value: 'other', label: 'Other' }
-              ] },
-            { name: 'branchId', label: 'Branch', type: 'select', required: true,
-              placeholder: branches.length > 1 ? 'Choose a branch' : null,
-              options: branches.map((b) => ({ value: b.id, label: b.name })) },
-            { name: 'level', label: 'Level', type: 'select', required: true, placeholder: 'Choose a level',
-              options: curriculum().map((l) => ({ value: l.value, label: l.label })),
-              help: 'A student sits at their own level; a batch may teach several.' },
-            { name: 'batchId', label: 'Batch', type: 'select', placeholder: 'Place later',
-              options: open.map((b) => ({
-                  value: b.id,
-                  label: `${b.name} — ${b.enrolled}/${b.capacity || '∞'}`
-                       + (b.capacity && b.enrolled >= b.capacity ? ' (full)' : '')
-              })),
-              help: 'A student with no batch appears on no register.' },
-            /*
-             * UAT5-BUG-504 — the edit case says what it does now.
-             *
-             * The field was always here, but on edit it carried no help at all,
-             * so changing a plan looked as if it might re-bill and in fact did
-             * nothing visible: updateStudent() writes the field and stops. What
-             * actually happens is that runBillingScheduler() reads
-             * student.feePlanId on its next run, so the change lands on the next
-             * cycle. Said out loud, in the same words natyam-mobile now uses —
-             * where the field was missing from the edit form entirely, which is
-             * what the bug reported.
-             */
-            { name: 'feePlanId', label: 'Fee plan', type: 'select', placeholder: 'No plan',
-              options: plans.map((p) => ({ value: p.id, label: `${p.name} — ${formatMoney(p.amount)}` })),
-              help: existing
-                  ? 'Applies from the next billing cycle. Fees already raised are not changed.'
-                  : 'Choosing one raises the fee schedule immediately.' },
-            { name: 'billingFrequency', label: 'Billing frequency', type: 'select',
-              placeholder: 'Use the fee plan default',
-              options: exposedFeeFrequencies().map((f) => ({ value: f.value, label: f.label })) },
-            { name: 'joinedOn', label: 'Joined on', type: 'date' },
-
-            { type: 'divider', label: 'Guardian' },
-            { name: 'guardianName', label: 'Guardian name', required: true },
-            { name: 'guardianRelation', label: 'Relationship', type: 'select',
-              options: ['Mother', 'Father', 'Grandparent', 'Guardian', 'Sibling']
-                  .map((r) => ({ value: r, label: r })) },
-            { name: 'guardianPhone', label: 'Phone', type: 'tel', required: true },
-            { name: 'guardianEmail', label: 'Email', type: 'email' },
-            { name: 'alternatePhone', label: 'Emergency contact', type: 'tel',
-              help: 'Called when the guardian cannot be reached.' },
-            { name: 'address', label: 'Address', type: 'textarea', rows: 2 },
-
-            { type: 'divider', label: 'Health and notes' },
-            { name: 'medicalNotes', label: 'Medical notes', type: 'textarea', rows: 2,
-              help: 'Injuries, allergies, anything a teacher must know before class.' },
-            { name: 'notes', label: 'Other notes', type: 'textarea', rows: 2 }
-        ];
-
-        return fields.map((f) => f.type === 'divider' ? f : ({
-            ...f,
-            value: f.name === 'branchId'         ? defaultBranchId
-                 : f.name === 'joinedOn'         ? (existing?.joinedOn || localDate())
-                 : f.name === 'guardianRelation' ? (existing?.guardianRelation || 'Mother')
-                 : existing?.[f.name]
-        }));
-    }
-
-    static seed(fields) {
-        return Object.fromEntries(fields
-            .filter((f) => f.type !== 'divider')
-            .map((f) => [f.name, f.value ?? '']));
+        return studentFormFields({
+            mode: existing ? 'edit' : 'add',
+            existing,
+            branches,
+            batches,
+            feePlans,
+            defaultBranchId: session.branch() || ''
+        });
     }
 
     async newStudent() {
@@ -564,7 +502,7 @@ export default class StudentsPage extends Page {
             title: 'Add a student',
             description: 'Enrols directly, without an application.',
             fields,
-            values: StudentsPage.seed(fields),
+            values: seedStudentValues(fields),
             submitLabel: 'Enrol student',
             onSubmit: (values) => enrol(values)
         });
@@ -586,8 +524,12 @@ export default class StudentsPage extends Page {
 
         const saved = await formModal({
             title: `Edit ${student.name}`,
+            // Named here rather than left to the Batch field's own help text:
+            // changing the branch is the one edit that forces a second answer,
+            // and it is better said before somebody discovers it (UAT6 BUG-602).
+            description: 'Changing the branch means choosing a batch at the new one.',
             fields,
-            values: StudentsPage.seed(fields),
+            values: seedStudentValues(fields),
             submitLabel: 'Save changes',
             onSubmit: (values) => updateStudent(student.id, values)
         });
@@ -614,31 +556,46 @@ export default class StudentsPage extends Page {
         await this.load();
     }
 
+    /**
+     * Moves a student between batches.
+     *
+     * "Take them off every batch" is gone from the placeholder — UAT6. It was
+     * the shortest route to the record BUG-602 forbids: a student attending and
+     * billed, on no register. `assignToBatch()` now refuses it for an active
+     * student outright, so offering it here would only produce a rejection.
+     * Somebody who has stopped attending is handled by Status, which clears the
+     * batch itself, and the help text says so.
+     *
+     * Batches are fetched for every branch and then narrowed to the student's
+     * own, so a move cannot silently relocate them to another site — matching
+     * natyam-mobile, which has always done this.
+     */
     async moveBatch() {
         const student = this.profile?.student;
         if (!student) return;
 
-        const batches = (await listBatches(session.branch())).filter((b) => b.status !== 'closed');
+        const batches = (await listBatches(null))
+            .filter((b) => b.status !== 'closed')
+            .filter((b) => !student.branchId || b.branchId === student.branchId);
 
         const moved = await formModal({
             title: `Move ${student.name}`,
-            description: 'A student with no batch appears on no register.',
+            description: 'A student with no batch appears on no register, so a batch has to be chosen.',
             submitLabel: 'Move',
             fields: [
-                { name: 'batchId', label: 'Batch', type: 'select', placeholder: 'Take them off every batch',
+                { name: 'batchId', label: 'Batch', type: 'select', required: true,
+                  placeholder: 'Choose a batch',
                   options: batches.map((b) => ({
                       value: b.id,
                       label: `${b.name} — ${b.enrolled}/${b.capacity || '∞'}`
                            + (b.capacity && b.enrolled >= b.capacity ? ' (full)' : '')
                   })),
-                  help: 'The service refuses a batch that is already full.' }
+                  help: 'Only batches at this student’s branch. The service refuses one that is '
+                      + 'full or that does not teach their level. To take them off the register '
+                      + 'altogether, use Status instead.' }
             ],
             values: { batchId: student.batchId || '' },
-            // assignToBatch() treats a null batch as "take them off every
-            // batch", which is the placeholder above — so an empty value is a
-            // real choice here, not a missing one, and the field is
-            // deliberately not required.
-            onSubmit: (v) => assignToBatch(student.id, v.batchId || null)
+            onSubmit: (v) => assignToBatch(student.id, v.batchId)
         });
 
         if (!moved) return;
@@ -647,11 +604,17 @@ export default class StudentsPage extends Page {
     }
 
     /**
-     * Moves a student up one level.
+     * Moves a student up one level, and into the class that teaches it.
      *
-     * `promote()` also clears their batch — someone who has moved up is no
-     * longer in the right class — and the dialog says so, because otherwise
-     * they quietly vanish off a register the next morning.
+     * THE NEW BATCH IS PART OF THE PROMOTION — UAT6. `promote()` used to clear
+     * the batch and leave the student active, which is precisely the record
+     * BUG-602 says must not exist, and it produced one on every promotion. The
+     * destination is asked for here instead, filtered to batches that actually
+     * teach the next level, so the student never spends a moment unplaced.
+     *
+     * When nothing teaches the next level the dialog does not open: there is no
+     * answer to give it, and the honest thing to say is that the class has to
+     * exist first.
      */
     async promoteStudent() {
         const student = this.profile?.student;
@@ -672,22 +635,41 @@ export default class StudentsPage extends Page {
             return;
         }
 
+        const destinations = (await listBatches(null))
+            .filter((b) => b.status !== 'closed')
+            .filter((b) => !student.branchId || b.branchId === student.branchId)
+            .filter((b) => levelsOf(b).includes(next.value));
+
+        if (!destinations.length) {
+            toast.error(`No batch teaches ${next.label} yet`,
+                `${student.name} cannot be promoted into a class that is not running. `
+                + `Create or reopen a ${next.label} batch at their branch first.`);
+            return;
+        }
+
         const done = await formModal({
             title: `Promote ${student.name}`,
-            description: `${ladder[index].label} → ${next.label}. This also takes them off `
-                       + `${student.batchId ? 'their current batch' : 'any batch'}, so they can be `
-                       + 'placed in one that teaches the new level.',
+            description: `${ladder[index].label} → ${next.label}. They move straight into the batch `
+                       + 'chosen below, so they are never off a register.',
             submitLabel: 'Promote',
             fields: [
+                { name: 'batchId', label: `Batch at ${next.label}`, type: 'select', required: true,
+                  placeholder: 'Choose a batch',
+                  options: destinations.map((b) => ({
+                      value: b.id,
+                      label: `${b.name} — ${b.enrolled}/${b.capacity || '∞'}`
+                           + (b.capacity && b.enrolled >= b.capacity ? ' (full)' : '')
+                  })),
+                  help: `Only batches teaching ${next.label} at this student’s branch.` },
                 { name: 'note', label: 'Note', type: 'textarea', rows: 2,
                   help: 'Optional. Kept on the record as the reason for the promotion.' }
             ],
-            values: { note: '' },
-            onSubmit: (v) => promote(student.id, { note: v.note })
+            values: { batchId: '', note: '' },
+            onSubmit: (v) => promote(student.id, { batchId: v.batchId, note: v.note })
         });
 
         if (!done) return;
-        toast.success('Promoted', `${student.name} is now at ${done.to.label}.`);
+        toast.success('Promoted', `${student.name} is now at ${done.to.label}, in ${done.batch.name}.`);
         await this.refreshAfterOperation(student.id);
     }
 
@@ -699,28 +681,61 @@ export default class StudentsPage extends Page {
      * `setStatus()` reports any outstanding balance back rather than cancelling
      * it: whether a leaver still owes money is a decision for a person, so this
      * surfaces the figure instead of swallowing it.
+     *
+     * COMING BACK asks for the batch they are returning to — UAT6, the other
+     * half of the invariant. A leaver's batch was cleared when they left, so
+     * setting them Active again would otherwise put an attending student on no
+     * register. Only asked when there is genuinely nothing to go back to: a
+     * student On leave keeps their batch and is never asked.
      */
     async changeStatus() {
         const student = this.profile?.student;
         if (!student) return;
 
         const leaving = (s) => s === STUDENT_STATUS.INACTIVE || s === STUDENT_STATUS.GRADUATED;
+        const returning = (s) => s === STUDENT_STATUS.ACTIVE && !student.batchId;
+
+        const batches = student.batchId ? [] : (await listBatches(null))
+            .filter((b) => b.status !== 'closed')
+            .filter((b) => !student.branchId || b.branchId === student.branchId)
+            .filter((b) => levelsOf(b).includes(student.level));
 
         const result = await formModal({
             title: `${student.name}'s status`,
             description: `Currently ${statusLabel(student.status)}.`,
             submitLabel: 'Save status',
             fields: [
-                { name: 'status', label: 'Status', type: 'select', required: true, options: STATUS_OPTIONS },
+                { name: 'status', label: 'Status', type: 'select', required: true,
+                  reactive: true, options: STATUS_OPTIONS },
                 { name: 'reason', label: 'Why', type: 'textarea', rows: 2,
                   showIf: (v) => leaving(v.status),
                   help: 'Required when someone leaves — it is the only record of why. '
-                      + 'They also come off their batch.' }
+                      + 'They also come off their batch.' },
+                { name: 'batchId', label: 'Returning to which batch?', type: 'select',
+                  placeholder: 'Choose a batch',
+                  showIf: (v) => returning(v.status),
+                  options: batches.map((b) => ({
+                      value: b.id,
+                      label: `${b.name} — ${b.enrolled}/${b.capacity || '∞'}`
+                           + (b.capacity && b.enrolled >= b.capacity ? ' (full)' : '')
+                  })),
+                  help: 'They came off their batch when they left. Only batches teaching '
+                      + `${levelLabel(student.level) || 'their level'} at their branch.` }
             ],
-            values: { status: student.status || STUDENT_STATUS.ACTIVE, reason: '' },
-            validateAll: (v) => (leaving(v.status) && !String(v.reason || '').trim())
-                ? { reason: 'Record why the student is leaving.' } : null,
-            onSubmit: (v) => setStatus(student.id, v.status, { reason: v.reason })
+            values: { status: student.status || STUDENT_STATUS.ACTIVE, reason: '', batchId: '' },
+            validateAll: (v) => {
+                if (leaving(v.status) && !String(v.reason || '').trim()) {
+                    return { reason: 'Record why the student is leaving.' };
+                }
+                if (returning(v.status) && !v.batchId) {
+                    return batches.length
+                        ? { batchId: 'Choose the batch they are returning to.' }
+                        : { status: `No batch at their branch teaches ${levelLabel(student.level) || 'their level'}. `
+                                  + 'Open one before bringing them back.' };
+                }
+                return null;
+            },
+            onSubmit: (v) => setStatus(student.id, v.status, { reason: v.reason, batchId: v.batchId || null })
         });
 
         if (!result) return;
