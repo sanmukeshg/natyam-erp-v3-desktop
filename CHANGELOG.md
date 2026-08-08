@@ -12,6 +12,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
+## [3.6.2] — unreleased
+
+### Fixed
+
+- **The Notifications screen was down** — "(b.createdAt || '').localeCompare is not a
+  function". `/notifications` has two writers and they disagreed: both apps write `createdAt`
+  as an ISO string, while the ENH-510 Cloud Functions wrote `FieldValue.serverTimestamp()`,
+  which reads back as a Firestore Timestamp **object**. A Timestamp is truthy, so the `|| ''`
+  guard never fired, and it has no `localeCompare`. The throw happened inside `Array.sort` in
+  `recent()`, which feeds `centre()`, so **one** function-written row took the whole feed down
+  — not just that row.
+- **The sort tolerates any shape** — string, Timestamp, plain `{seconds}` (what survives a
+  Backup & restore round-trip), `Date`, or missing. Kept even though the writer is fixed: rows
+  already written keep their Timestamps permanently.
+
+The sender fix itself lives in `natyam-mobile/functions/`, which is where the Cloud Functions
+are deployed from. This repo carries the client half only.
+
+Version jumps 3.6.0 → 3.6.2 to stay in step with `natyam-mobile`; there was no 3.6.1 here.
+
+---
+
 ## [3.6.0] — unreleased
 
 Two features that were built everywhere except the one place someone could use them. Both
