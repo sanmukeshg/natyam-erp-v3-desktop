@@ -12,7 +12,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
-## [3.5.0] — unreleased
+## [3.5.1] — unreleased
+
+### Changed
+
+- **Guardian email is mandatory on the admission form's applicant step.** The field was
+  already required by `studentFields.js` everywhere a student record is created or edited, but
+  the admission form itself still treated it as optional — so an application could be approved
+  into a student record that then failed its own validation on the next edit. Desktop and
+  mobile carry the identical rule, in the shared `admissions.service.js`.
+
+The icon work in the mobile 3.5.1 is deliberately not mirrored here: the desktop surface uses
+its own `.v3-` classes and was not audited.
+
+---
+
+## [3.5.0] — 2026-08-08
 
 UAT Round 6. All four items — BUG-601, BUG-602, ENH-601 and ENH-602 — land in both apps,
 because all four change a workflow rather than a screen.
