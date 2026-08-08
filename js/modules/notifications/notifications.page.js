@@ -31,7 +31,12 @@ import { toast } from '../../ui/toast.js';
 import { session } from '../../core/session.js';
 import { EVENTS } from '../../core/bus.js';
 import { relativeTime, formatDateLong } from '../../utils/date.js';
-import { centre, markRead, markAllRead, dismiss, refreshAlerts } from '../../services/notifications.service.js';
+import {
+    centre, markRead, markAllRead, dismiss, refreshAlerts,
+    announce, removeAnnouncement
+} from '../../services/notifications.service.js';
+import { CAPABILITIES } from '../../config/app.config.js';
+import { formModal, confirmModal } from '../../ui/form.js';
 
 const SEVERITY_ORDER = { error: 0, warning: 1, success: 2, info: 3 };
 
@@ -65,6 +70,11 @@ export default class NotificationsPage extends Page {
                         ${raw(icon('refresh-cw', { size: 14 }))} Refresh alerts
                     </button>
                     <button class="v3-ghost-btn v3-btn-md" data-action="mark-all">Mark all read</button>
+                    ${session.can(CAPABILITIES.SETTINGS_EDIT) ? html`
+                        <button class="v3-action-btn v3-btn-md" data-action="post-announcement">
+                            ${raw(icon('plus', { size: 14 }))} Post announcement
+                        </button>
+                    ` : ''}
                 </div>
             </div>
             <div class="v3-page-body" data-role="body">
@@ -145,6 +155,10 @@ export default class NotificationsPage extends Page {
                                         ${a.author || 'The school'}${a.at ? ` · ${formatDateLong(a.at)}` : ''}
                                     </div>
                                 </div>
+                                ${session.can(CAPABILITIES.SETTINGS_EDIT) ? html`
+                                    <button class="v3-ghost-btn v3-btn-sm" data-action="remove-announcement"
+                                            data-id="${a.id}">Take down</button>
+                                ` : ''}
                             </div>
                         `)}
                     </div>
@@ -188,6 +202,70 @@ export default class NotificationsPage extends Page {
         `);
     }
 
+    /* --------------------------------------------------------- ANNOUNCEMENTS */
+
+    /**
+     * Posting a notice.
+     *
+     * `announce()` has been sitting in notifications.service.js, fully written
+     * and permission-gated, with no caller in either app — the centre could
+     * display announcements but nothing could create one. This is that caller;
+     * the service needed no changes.
+     *
+     * The post reaches every subscribed device through the onAnnouncementPosted
+     * trigger and cannot be recalled. The dialog says so, because the author
+     * cannot be expected to know how far it travels.
+     */
+    async postAnnouncement() {
+        const posted = await formModal({
+            title: 'Post an announcement',
+            description: 'Appears for everyone in both apps, and pushes to devices with '
+                + 'Announcements switched on. It cannot be unsent.',
+            submitLabel: 'Post announcement',
+            fields: [
+                { name: 'title', label: 'Announcement', required: true,
+                  placeholder: 'Hall change for Saturday' },
+                { name: 'body', label: 'Details', type: 'textarea',
+                  help: 'Optional. Shown under the title.' },
+                { name: 'pinned', label: 'Keep at the top', type: 'switch',
+                  help: 'Pinned notices sort above the rest until taken down.' }
+            ],
+            values: { pinned: false },
+            onSubmit: (v) => announce({
+                title: v.title,
+                body: v.body,
+                pinned: Boolean(v.pinned)
+            })
+        });
+
+        if (!posted) return;
+        toast.success('Announcement posted', posted.title);
+        await this.load();
+    }
+
+    /**
+     * "Take down", not "delete" — that is honestly all it can do. A push
+     * already delivered is on people's phones and nothing here reaches it.
+     */
+    async takeDownAnnouncement(id) {
+        const a = (this.data?.announcements || []).find((x) => x.id === id);
+        if (!a) return;
+
+        const ok = await confirmModal({
+            title: `Take down "${a.title}"?`,
+            message: 'It disappears from both apps for everyone. Any push already delivered '
+                + 'stays on the devices that received it.',
+            confirmLabel: 'Take down',
+            tone: 'caution'
+        });
+        if (!ok) return;
+
+        await this.run('Taking down', async () => {
+            await removeAnnouncement(id);
+            toast.success('Announcement taken down', a.title);
+        });
+    }
+
     /* --------------------------------------------------------------- ACTIONS */
 
     async run(label, fn) {
@@ -228,6 +306,10 @@ export default class NotificationsPage extends Page {
             const row = this.data?.rows.find((r) => r.id === t.dataset.id);
             if (row && !row.read) markRead(row.id).catch(() => {});
         }));
+
+        this.onDispose(on(root, 'click', '[data-action="post-announcement"]', () => this.postAnnouncement()));
+        this.onDispose(on(root, 'click', '[data-action="remove-announcement"]', (_e, t) =>
+            this.takeDownAnnouncement(t.dataset.id)));
 
         this.onDispose(on(root, 'click', '[data-action="refresh"]', () =>
             this.run('Refreshing alerts', async () => {

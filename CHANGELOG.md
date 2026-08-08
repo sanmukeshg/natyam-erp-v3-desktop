@@ -12,7 +12,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versioning is
 
 ---
 
-## [3.5.1] — unreleased
+## [3.6.0] — unreleased
+
+Two features that were built everywhere except the one place someone could use them. Both
+land in `natyam-admin` and `natyam-mobile`.
+
+### Added
+
+- **Declare a holiday** — Settings → Holidays, a new tab beside Branches. The repository, the
+  dashboard day board, Backup & restore and the `holidayReminders` Cloud Function were all
+  written and all working; nothing could create a row, so the collection was permanently empty
+  and every one of those readers read nothing.
+- **`js/services/holidays.service.js`**, byte-identical with `natyam-mobile`. Gated on
+  `settings.edit`. Upcoming and past are returned separately, past capped at 400 days. The
+  repository needed no changes at all.
+- **Branch-scoped holidays** — one site closed while the others stay open, which the reads
+  already honoured and nothing could express.
+- **Post an announcement** — a button on the Notifications screen, gated on `settings.edit`.
+  `announce()` has been complete in `notifications.service.js` since the module was written
+  and **had no caller anywhere in either app**. This is the caller; the service is untouched.
+
+### Changed
+
+- **A holiday does not cancel classes**, and the screen says so. Milestone 6 deliberately
+  decoupled attendance from holidays; cancelling a class stays a deliberate act in Timetable.
+- **`firestore.rules`: holidays are writable.** The block was `create, update, delete: if
+  false`. Now `create, update` on `canManageSettings()`, hard `delete` Administrator-only for
+  `replaceAll()` during a restore, matching branches. **Needs publishing by hand.**
+
+---
+
+## [3.5.1] — 2026-08-08
 
 ### Changed
 

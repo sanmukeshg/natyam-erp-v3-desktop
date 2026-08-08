@@ -80,6 +80,7 @@ import {
     updateInstitute, addMasterEntry, createUser,
     updateBranch, updateFeePlan, updateMasterEntry, updateUser
 } from '../../services/settings.service.js';
+import { listHolidays, createHoliday, updateHoliday, removeHoliday } from '../../services/holidays.service.js';
 import { search as searchAudit } from '../../services/audit.service.js';
 import {
     backupStatus, downloadBackup, exportStore, inspectBackup, restore, resetEverything
@@ -96,6 +97,10 @@ import { upload, remove as removeUpload, validateFile, UPLOAD_SCOPES } from '../
 const TABS = [
     { key: 'institute', label: 'Institute', cap: null },
     { key: 'branches', label: 'Branches', cap: null },
+    // Sits with the reference data rather than in a module of its own: a
+    // holiday is a statement about the academy's calendar, edited once a term
+    // alongside branches and fee plans, not an operational screen.
+    { key: 'holidays', label: 'Holidays', cap: null },
     { key: 'fees', label: 'Fee plans', cap: null },
     { key: 'curriculum', label: 'Curriculum', cap: null },
     // The public-facing content management system. Sits with the other
@@ -185,6 +190,15 @@ export default class SettingsPage extends Page {
                 this.data.years = await listAcademicYears().catch(() => []);
             } else if (this.tab === 'branches' && !this.data.branches) {
                 this.data.branches = await listBranches({ includeInactive: true });
+            } else if (this.tab === 'holidays' && !this.data.holidays) {
+                // Branches ride along for the scope picker — a holiday may
+                // close one site while the others stay open.
+                const [holidays, branches] = await Promise.all([
+                    listHolidays(),
+                    this.data.branches ? Promise.resolve(this.data.branches) : listBranches()
+                ]);
+                this.data.holidays = holidays;
+                this.data.branches = branches;
             } else if (this.tab === 'fees' && !this.data.feePlans) {
                 this.data.feePlans = await listFeePlans({ includeInactive: true });
             } else if (this.tab === 'curriculum' && !this.data.master) {
@@ -227,6 +241,7 @@ export default class SettingsPage extends Page {
         switch (tab) {
             case 'institute':   return this.institutePanel();
             case 'branches':    return this.branchesPanel();
+            case 'holidays':    return this.holidaysPanel();
             case 'fees':        return this.feePlansPanel();
             case 'curriculum':  return this.curriculumPanel();
             case 'website':     return this.websitePanel();
@@ -315,6 +330,79 @@ export default class SettingsPage extends Page {
                     </div>
                 ` : html`<div class="v3-empty">No branches yet.</div>`}
             </section>
+        `;
+    }
+
+    /**
+     * Upcoming and past in two cards, because they answer different questions.
+     * "When are we next shut" is the one being asked nearly every time, so it
+     * leads and past closures sit below it rather than interleaved.
+     *
+     * Unlike Branches above, the create action is capability-gated here rather
+     * than shown-and-refused: this tab is visible to everyone (a teacher wants
+     * to know the academy is closed on Monday) and offering a button that
+     * throws would be worse than not offering it.
+     */
+    holidaysPanel() {
+        const { upcoming = [], past = [] } = this.data.holidays || {};
+        const mayEdit = session.can(CAPABILITIES.SETTINGS_EDIT);
+        const add = mayEdit ? 'Declare holiday' : null;
+
+        return html`
+            <section class="v3-card">
+                ${cardHead('Upcoming holidays',
+                    upcoming.length
+                        ? `${upcoming.length} ahead. Next: ${formatDateLong(upcoming[0].date)}.`
+                        : 'Nothing declared ahead of today.',
+                    add, add ? 'add-holiday' : null)}
+                ${upcoming.length ? html`
+                    <div class="v3-list">
+                        ${upcoming.map((h) => this.holidayRow(h, mayEdit))}
+                    </div>
+                ` : html`<div class="v3-empty">No holidays declared.</div>`}
+                <div class="v3-card-body">
+                    <div class="v3-notice" data-tone="info">
+                        A holiday appears on the day board and goes out as a push reminder the
+                        evening before. It does <strong>not</strong> cancel the classes scheduled
+                        that day — cancel those in Timetable if they are not running.
+                    </div>
+                </div>
+            </section>
+
+            ${past.length ? html`
+                <section class="v3-card">
+                    ${cardHead('Earlier', 'Kept as the record of why a register is empty.')}
+                    <div class="v3-list">
+                        ${past.map((h) => this.holidayRow(h, mayEdit))}
+                    </div>
+                </section>
+            ` : ''}
+        `;
+    }
+
+    holidayRow(h, mayEdit) {
+        const branch = h.branchId
+            ? (this.data.branches || []).find((b) => b.id === h.branchId)
+            : null;
+
+        return html`
+            <div class="v3-row">
+                <div class="v3-row-main">
+                    <div class="v3-row-title">${h.name}</div>
+                    <div class="v3-row-detail">
+                        ${formatDateLong(h.date)}${h.note ? ` · ${h.note}` : ''}
+                    </div>
+                </div>
+                <span class="v3-chip" data-fee="${h.branchId ? '' : 'clear'}">
+                    ${h.branchId ? (branch?.name || 'One branch') : 'All branches'}
+                </span>
+                ${mayEdit ? html`
+                    <button class="v3-ghost-btn v3-btn-sm" data-action="edit-holiday"
+                            data-id="${h.id}">Edit</button>
+                    <button class="v3-ghost-btn v3-btn-sm" data-action="remove-holiday"
+                            data-id="${h.id}">Remove</button>
+                ` : ''}
+            </div>
         `;
     }
 
@@ -621,6 +709,9 @@ export default class SettingsPage extends Page {
 
         this.onDispose(on(root, 'click', '[data-action="add-branch"]', () => this.addBranch()));
         this.onDispose(on(root, 'click', '[data-action="add-plan"]', () => this.addFeePlan()));
+        this.onDispose(on(root, 'click', '[data-action="add-holiday"]', () => this.addHoliday()));
+        this.onDispose(on(root, 'click', '[data-action="edit-holiday"]', (_e, t) => this.editHoliday(t.dataset.id)));
+        this.onDispose(on(root, 'click', '[data-action="remove-holiday"]', (_e, t) => this.removeHoliday(t.dataset.id)));
         this.onDispose(on(root, 'click', '[data-action="add-year"]', () => this.addYear()));
         this.onDispose(on(root, 'click', '[data-action="edit-institute"]', () => this.editInstitute()));
         this.onDispose(on(root, 'click', '[data-action="edit-branch"]', (_e, t) => this.editBranch(t.dataset.id)));
@@ -1143,6 +1234,98 @@ export default class SettingsPage extends Page {
         toast.success('Branch added', created.name);
         this.data.branches = null;
         await this.loadTab();
+    }
+
+    /* ------------------------------------------------------------ HOLIDAYS */
+
+    /**
+     * "All branches" leads the scope list and is the default. An academy closes
+     * as a whole far more often than a single site does, so the common case
+     * costs nothing and the exception costs one selection.
+     */
+    holidayFields() {
+        return [
+            { name: 'name', label: 'Holiday', required: true, placeholder: 'Diwali' },
+            { name: 'date', label: 'Date', type: 'date', required: true },
+            { name: 'branchId', label: 'Applies to', type: 'select',
+              options: [
+                  { value: '', label: 'All branches' },
+                  ...(this.data.branches || []).map((b) => ({ value: b.id, label: b.name }))
+              ],
+              help: 'Pick a branch only if the others stay open that day.' },
+            { name: 'note', label: 'Note', type: 'textarea',
+              help: 'Optional. Shown to staff on the day board.' }
+        ];
+    }
+
+    async addHoliday() {
+        const created = await formModal({
+            title: 'Declare a holiday',
+            description: 'Appears on the day board and goes out as a reminder the evening before.',
+            submitLabel: 'Declare holiday',
+            fields: this.holidayFields(),
+            values: { branchId: '' },
+            onSubmit: (values) => createHoliday(values)
+        });
+
+        if (!created) return;
+        toast.success('Holiday declared', `${created.name} · ${formatDateLong(created.date)}`);
+        this.data.holidays = null;
+        await this.loadTab();
+    }
+
+    async editHoliday(id) {
+        const h = this.findHoliday(id);
+        if (!h) return;
+
+        const saved = await formModal({
+            title: `Edit ${h.name}`,
+            description: 'Corrections apply from now — a reminder already sent cannot be recalled.',
+            submitLabel: 'Save changes',
+            fields: this.holidayFields(),
+            values: {
+                name: h.name || '', date: h.date || '',
+                branchId: h.branchId || '', note: h.note || ''
+            },
+            onSubmit: (values) => updateHoliday(id, values)
+        });
+
+        if (!saved) return;
+        toast.success('Holiday updated', saved.name);
+        this.data.holidays = null;
+        await this.loadTab();
+    }
+
+    async removeHoliday(id) {
+        const h = this.findHoliday(id);
+        if (!h) return;
+
+        const ok = await confirmModal({
+            title: `Remove ${h.name}?`,
+            message: `${formatDateLong(h.date)} goes back to being an ordinary day. `
+                + 'Nothing else changes — classes and registers are untouched either way.',
+            confirmLabel: 'Remove',
+            // caution, not negative: the row is soft-deleted and the audit
+            // trail survives. (`.v3-notice` has no negative variant either —
+            // the tone would render unstyled.)
+            tone: 'caution'
+        });
+        if (!ok) return;
+
+        try {
+            await removeHoliday(id);
+            toast.success('Holiday removed', h.name);
+            this.data.holidays = null;
+            await this.loadTab();
+        } catch (err) {
+            toast.error(err.message);
+        }
+    }
+
+    /** Either group — the row that fired could be upcoming or past. */
+    findHoliday(id) {
+        const { upcoming = [], past = [] } = this.data.holidays || {};
+        return [...upcoming, ...past].find((h) => h.id === id) || null;
     }
 
     async addFeePlan() {
